@@ -12,7 +12,20 @@ const CATEGORIES = [
     desc: 'Najľahšie',
     emoji: '🔺',
     colors: ['#ff9a8b', '#ff6a88'],
-    items: ['🔴', '🟠', '🟡', '🟢', '🔵', '🟣', '⭐', '🔶', '🔷', '⬛', '⬜', '🔺'],
+    items: [
+      { emoji: '🔴', name: 'Červený kruh' },
+      { emoji: '🟠', name: 'Oranžový kruh' },
+      { emoji: '🟡', name: 'Žltý kruh' },
+      { emoji: '🟢', name: 'Zelený kruh' },
+      { emoji: '🔵', name: 'Modrý kruh' },
+      { emoji: '🟣', name: 'Fialový kruh' },
+      { emoji: '⭐', name: 'Hviezda' },
+      { emoji: '🔶', name: 'Diamant' },
+      { emoji: '🔷', name: 'Modrý diamant' },
+      { emoji: '⬛', name: 'Štvorec' },
+      { emoji: '⬜', name: 'Biely štvorec' },
+      { emoji: '🔺', name: 'Trojuholník' },
+    ],
   },
   {
     id: 'fruits',
@@ -20,7 +33,20 @@ const CATEGORIES = [
     desc: 'Ľahké',
     emoji: '🍎',
     colors: ['#ffd166', '#ff9f43'],
-    items: ['🍎', '🍌', '🍇', '🍓', '🍊', '🍉', '🍑', '🍍', '🥝', '🍒', '🍋', '🥭'],
+    items: [
+      { emoji: '🍎', name: 'Jablko' },
+      { emoji: '🍌', name: 'Banán' },
+      { emoji: '🍇', name: 'Hrozno' },
+      { emoji: '🍓', name: 'Jahoda' },
+      { emoji: '🍊', name: 'Pomaranč' },
+      { emoji: '🍉', name: 'Melón' },
+      { emoji: '🍑', name: 'Broskyňa' },
+      { emoji: '🍍', name: 'Ananás' },
+      { emoji: '🥝', name: 'Kivi' },
+      { emoji: '🍒', name: 'Čerešne' },
+      { emoji: '🍋', name: 'Citrón' },
+      { emoji: '🥭', name: 'Mango' },
+    ],
   },
   {
     id: 'animals',
@@ -28,7 +54,20 @@ const CATEGORIES = [
     desc: 'Stredné',
     emoji: '🐶',
     colors: ['#8bd3a0', '#4fb286'],
-    items: ['🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐨', '🐷', '🐸', '🦁'],
+    items: [
+      { emoji: '🐶', name: 'Pes' },
+      { emoji: '🐱', name: 'Mačka' },
+      { emoji: '🐭', name: 'Myš' },
+      { emoji: '🐹', name: 'Škrečok' },
+      { emoji: '🐰', name: 'Zajac' },
+      { emoji: '🦊', name: 'Líška' },
+      { emoji: '🐻', name: 'Medveď' },
+      { emoji: '🐼', name: 'Panda' },
+      { emoji: '🐨', name: 'Koala' },
+      { emoji: '🐷', name: 'Prasiatko' },
+      { emoji: '🐸', name: 'Žaba' },
+      { emoji: '🦁', name: 'Lev' },
+    ],
   },
   {
     id: 'vehicles',
@@ -36,7 +75,20 @@ const CATEGORIES = [
     desc: 'Stredné',
     emoji: '🚗',
     colors: ['#6ec6ff', '#4a9de8'],
-    items: ['🚗', '🚕', '🚙', '🚌', '🚓', '🚑', '🚒', '🚜', '🚁', '✈️', '🚀', '🚲'],
+    items: [
+      { emoji: '🚗', name: 'Auto' },
+      { emoji: '🚕', name: 'Taxík' },
+      { emoji: '🚙', name: 'Terénne auto' },
+      { emoji: '🚌', name: 'Autobus' },
+      { emoji: '🚓', name: 'Policajné auto' },
+      { emoji: '🚑', name: 'Sanitka' },
+      { emoji: '🚒', name: 'Hasičské auto' },
+      { emoji: '🚜', name: 'Traktor' },
+      { emoji: '🚁', name: 'Vrtuľník' },
+      { emoji: '✈️', name: 'Lietadlo' },
+      { emoji: '🛵', name: 'Skúter' },
+      { emoji: '🚲', name: 'Bicykel' },
+    ],
   },
   {
     id: 'space',
@@ -44,7 +96,20 @@ const CATEGORIES = [
     desc: 'Náročné',
     emoji: '🚀',
     colors: ['#7b6ef6', '#5b4fd6'],
-    items: ['🚀', '🌟', '🪐', '🌙', '☄️', '🛸', '🌍', '👽', '🔭', '✨', '🌌', '🛰️'],
+    items: [
+      { emoji: '🚀', name: 'Raketa' },
+      { emoji: '🌟', name: 'Hviezda' },
+      { emoji: '🪐', name: 'Planéta' },
+      { emoji: '🌙', name: 'Mesiac' },
+      { emoji: '☄️', name: 'Kométa' },
+      { emoji: '🛸', name: 'UFO' },
+      { emoji: '🌍', name: 'Zem' },
+      { emoji: '👽', name: 'Mimozemšťan' },
+      { emoji: '🔭', name: 'Ďalekohľad' },
+      { emoji: '✨', name: 'Iskry' },
+      { emoji: '🌌', name: 'Galaxia' },
+      { emoji: '🛰️', name: 'Satelit' },
+    ],
   },
   {
     id: 'fairytale',
@@ -52,7 +117,20 @@ const CATEGORIES = [
     desc: 'Najťažšie',
     emoji: '🧚',
     colors: ['#f78fb3', '#c56cf0'],
-    items: ['🧚', '👸', '🤴', '🧙', '🧜‍♀️', '🦄', '🐉', '👑', '🏰', '🧞', '🪄', '🦸'],
+    items: [
+      { emoji: '🧚', name: 'Víla' },
+      { emoji: '👸', name: 'Princezná' },
+      { emoji: '🤴', name: 'Princ' },
+      { emoji: '🧙', name: 'Čarodejník' },
+      { emoji: '🧜‍♀️', name: 'Morská víla' },
+      { emoji: '🦄', name: 'Jednorožec' },
+      { emoji: '🐉', name: 'Drak' },
+      { emoji: '👑', name: 'Koruna' },
+      { emoji: '🏰', name: 'Hrad' },
+      { emoji: '🧞', name: 'Džin' },
+      { emoji: '🪄', name: 'Čarovná palička' },
+      { emoji: '🦸', name: 'Superhrdina' },
+    ],
   },
 ];
 
@@ -100,19 +178,6 @@ function setStars(catId, levelIndex, stars) {
     progress.stars[key] = stars;
     saveProgress(progress);
   }
-}
-
-function isCategoryUnlocked(catIndex) {
-  if (catIndex === 0) return true;
-  const prevCat = CATEGORIES[catIndex - 1];
-  return starsFor(prevCat.id, LEVELS.length - 1) > 0;
-}
-
-function isLevelUnlocked(catIndex, levelIndex) {
-  if (!isCategoryUnlocked(catIndex)) return false;
-  if (levelIndex === 0) return true;
-  const cat = CATEGORIES[catIndex];
-  return starsFor(cat.id, levelIndex - 1) > 0;
 }
 
 function categoryTotalStars(catIndex) {
@@ -207,21 +272,18 @@ function renderCategories() {
   const grid = document.getElementById('category-grid');
   grid.innerHTML = '';
   CATEGORIES.forEach((cat, i) => {
-    const unlocked = isCategoryUnlocked(i);
     const total = categoryTotalStars(i);
     const btn = document.createElement('button');
     btn.className = 'category-card';
-    btn.disabled = !unlocked;
     btn.style.background = `linear-gradient(150deg, ${cat.colors[0]}, ${cat.colors[1]})`;
     btn.innerHTML = `
-      ${unlocked ? '' : '<span class="cat-lock">🔒</span>'}
       <span class="cat-badge">${cat.emoji}</span>
       <span class="cat-emoji">${cat.emoji}</span>
       <span class="cat-name">${cat.name}</span>
       <span class="cat-desc">${cat.desc}</span>
-      <span class="cat-stars">${unlocked ? '⭐'.repeat(Math.min(total, 9)) || 'Nová!' : 'Dokonči predošlú kategóriu'}</span>
+      <span class="cat-stars">${'⭐'.repeat(Math.min(total, 9)) || 'Nová!'}</span>
     `;
-    if (unlocked) btn.addEventListener('click', () => goToLevels(i));
+    btn.addEventListener('click', () => goToLevels(i));
     grid.appendChild(btn);
   });
 }
@@ -236,19 +298,15 @@ function renderLevels() {
   const grid = document.getElementById('level-grid');
   grid.innerHTML = '';
   LEVELS.forEach((lvl, i) => {
-    const unlocked = isLevelUnlocked(currentCatIndex, i);
     const stars = starsFor(cat.id, i);
     const btn = document.createElement('button');
     btn.className = 'level-card';
-    btn.disabled = !unlocked;
-    btn.innerHTML = unlocked
-      ? `
-        <div class="lvl-num">Úroveň ${i + 1}</div>
-        <div class="lvl-label">${lvl.label} · ${lvl.pairs} párov</div>
-        <div class="lvl-stars">${'⭐'.repeat(stars)}${'☆'.repeat(3 - stars)}</div>
-      `
-      : `<div class="lvl-lock">🔒</div><div class="lvl-label">Zamknuté</div>`;
-    if (unlocked) btn.addEventListener('click', () => goToGame(currentCatIndex, i));
+    btn.innerHTML = `
+      <div class="lvl-num">Úroveň ${i + 1}</div>
+      <div class="lvl-label">${lvl.label} · ${lvl.pairs} párov</div>
+      <div class="lvl-stars">${'⭐'.repeat(stars)}${'☆'.repeat(3 - stars)}</div>
+    `;
+    btn.addEventListener('click', () => goToGame(currentCatIndex, i));
     grid.appendChild(btn);
   });
 }
@@ -302,9 +360,9 @@ function startGame() {
   const cat = CATEGORIES[currentCatIndex];
   const lvl = LEVELS[currentLevelIndex];
   const chosenItems = cat.items.slice(0, lvl.pairs);
-  deck = shuffle([...chosenItems, ...chosenItems]).map((symbol, idx) => ({
+  deck = shuffle([...chosenItems, ...chosenItems]).map((item, idx) => ({
     id: idx,
-    symbol,
+    item,
     flipped: false,
     matched: false,
   }));
@@ -320,7 +378,6 @@ function startGame() {
 
   const board = document.getElementById('board');
   board.innerHTML = '';
-  board.style.gridTemplateColumns = `repeat(${lvl.cols}, 1fr)`;
 
   deck.forEach((card) => {
     const el = document.createElement('button');
@@ -328,13 +385,69 @@ function startGame() {
     el.dataset.id = card.id;
     el.setAttribute('aria-label', 'Skrytá karta');
     el.innerHTML = `
-      <span class="card-face back">❓</span>
-      <span class="card-face front">${card.symbol}</span>
+      <span class="card-face back"><span class="card-back-icon">${cat.emoji}</span></span>
+      <span class="card-face front" style="--badge-grad: linear-gradient(150deg, ${cat.colors[0]}, ${cat.colors[1]})">
+        <span class="card-icon-badge">${card.item.emoji}</span>
+        <span class="card-name">${card.item.name}</span>
+      </span>
     `;
     el.addEventListener('click', () => onCardClick(card.id, el));
     board.appendChild(el);
   });
+
+  requestAnimationFrame(layoutBoard);
 }
+
+/* ---------------------------------------------------------
+   BOARD LAYOUT: fit the card grid to fill the visible screen,
+   sizing cards up or down to match the current card count.
+--------------------------------------------------------- */
+
+function layoutBoard() {
+  const board = document.getElementById('board');
+  if (!screens.game.classList.contains('active')) return;
+  const count = deck.length;
+  if (!count) return;
+
+  const gap = window.innerWidth <= 480 ? 8 : 12;
+  const hud = document.querySelector('.game-hud');
+  const hudRect = hud.getBoundingClientRect();
+
+  const availWidth = document.documentElement.clientWidth - 36;
+  const availHeight = window.innerHeight - hudRect.bottom - 24;
+
+  const ratio = 3 / 4; // card width / height
+  let best = null;
+  for (let cols = 1; cols <= count; cols++) {
+    const rows = Math.ceil(count / cols);
+    const cellW = (availWidth - gap * (cols - 1)) / cols;
+    const cellH = (availHeight - gap * (rows - 1)) / rows;
+    if (cellW <= 0 || cellH <= 0) continue;
+    let cardW, cardH;
+    if (cellW / ratio <= cellH) {
+      cardW = cellW;
+      cardH = cellW / ratio;
+    } else {
+      cardH = cellH;
+      cardW = cellH * ratio;
+    }
+    const area = cardW * cardH;
+    if (!best || area > best.area) {
+      best = { cols, cardW, cardH, area };
+    }
+  }
+  if (!best) return;
+
+  board.style.gridTemplateColumns = `repeat(${best.cols}, ${best.cardW}px)`;
+  board.style.gridAutoRows = `${best.cardH}px`;
+  board.style.gap = `${gap}px`;
+}
+
+let resizeTimer = null;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(layoutBoard, 120);
+});
 
 function onCardClick(id, el) {
   if (boardLocked) return;
@@ -353,7 +466,7 @@ function onCardClick(id, el) {
     document.getElementById('hud-moves').textContent = moves;
     boardLocked = true;
     const [a, b] = flipped;
-    if (a.card.symbol === b.card.symbol) {
+    if (a.card.item.emoji === b.card.item.emoji) {
       setTimeout(() => {
         a.card.matched = true;
         b.card.matched = true;
