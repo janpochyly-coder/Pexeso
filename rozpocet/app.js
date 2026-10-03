@@ -135,7 +135,7 @@ async function createFirstMonth(){
   const p=await db.from('planned_payments').insert(DEFPLAN.map((x,i)=>({month_id:m.data.id,day:x.d,name:x.name,key:x.key,amount:x.amt,sort:i})));
   if(p.error)throw p.error;
 }
-async function loadAll(){
+async function loadAll(retry){
   const {data:{session}}=await db.auth.getSession();
   if(!session)return 'auth';
   S.email=session.user.email;
@@ -149,7 +149,10 @@ async function loadAll(){
     fetchAll('planned_payments'),fetchAll('transactions'),fetchAll('incomes'),fetchAll('debts',['sub'])]);
   if(hh.error)throw hh.error;
   S.hh=hh.data[0]||null;
-  if(!months.length){await createFirstMonth();return loadAll();}
+  if(!months.length){
+    if(retry)throw new Error('Prvý mesiac sa nepodarilo vytvoriť');
+    await createFirstMonth();return loadAll(true);
+  }
   months.sort((a,b)=>a.y-b.y||a.mo-b.mo);
   const idx={};
   S.months=months.map((r,i)=>{idx[r.id]=i;return{id:r.id,y:r.y,mo:r.mo,status:r.status,seq:r.seq,inc:{J:+r.inc_j,I:+r.inc_i},lim:{},plan:[]};});
