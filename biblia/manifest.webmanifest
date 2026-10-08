@@ -1,0 +1,13 @@
+{
+  "name": "Slovo – modlitby, rémy, memory",
+  "short_name": "Slovo",
+  "lang": "sk",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "background_color": "#f6f1e7",
+  "theme_color": "#2f3a6e",
+  "icons": [
+    {"src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable"}
+  ]
+}
