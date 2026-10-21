@@ -186,3 +186,6 @@ details.acc[open] .s-prev { display: none; }
 @keyframes fade { from { opacity: 0; } }
 @keyframes slideup { from { transform: translateY(40px); opacity: 0; } }
 @media (min-width: 700px) { .sheet { align-items: center; } .sheet-box { border-radius: 26px; } }
+[data-edit] { -webkit-touch-callout: none; }
+details.acc > summary, .chip { -webkit-user-select: none; user-select: none; }
+.sheet-box { max-height: 88vh; overflow-y: auto; }

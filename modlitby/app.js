@@ -53,7 +53,7 @@
     const hit = KNIHY.find(k => (k[0] === num || (!num && !k[0])) && k[3].some(x => name === x || (name.length >= 3 && x.startsWith(name)))) ||
       KNIHY.find(k => k[0] === num && k[3].some(x => name === x));
     if (!hit) return null;
-    return { slug: hit[1], en: hit[2], ch: m[3], v: m[4], v2: m[5] };
+    return { idx: KNIHY.indexOf(hit), slug: hit[1], en: hit[2], ch: m[3], v: m[4], v2: m[5] };
   }
   function findUrl(id, ref) {
     const p = parseRef(ref), name = (PREKLADY.find(t => t.id === id) || {}).nazov || id;
@@ -65,6 +65,50 @@
     return p ? ZDROJ_STRONG.replace('{slug}', p.slug).replace('{ch}', p.ch).replace('{v}', p.v) : 'https://www.google.com/search?q=' + encodeURIComponent(ref + ' strong interlinear');
   }
 
+  // ===== texty prekladov v appke (vstavané + importované) =====
+  const cache = {}, imported = new Set();
+  const idb = () => new Promise((res, rej) => { const r = indexedDB.open('modlitby-biblie', 1); r.onupgradeneeded = () => r.result.createObjectStore('b'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+  const idbOp = (mode, fn) => idb().then(db => new Promise((res, rej) => { const t = db.transaction('b', mode), rq = fn(t.objectStore('b')); t.oncomplete = () => res(rq && rq.result); t.onerror = () => rej(t.error); }));
+  idbOp('readonly', s => s.getAllKeys()).then(k => (k || []).forEach(x => imported.add(x))).catch(() => {});
+  const hasLocal = id => imported.has(id) || !!(PREKLADY.find(p => p.id === id) || {}).lokalny;
+  function loadBible(id) {
+    if (!cache[id]) cache[id] = (imported.has(id)
+      ? idbOp('readonly', s => s.get(id))
+      : fetch('biblie/' + id.toLowerCase() + '.json').then(r => { if (!r.ok) throw 0; return r.json(); })).catch(() => { delete cache[id]; return null; });
+    return cache[id];
+  }
+  async function lookup(id, ref) {
+    const p = parseRef(ref); if (!p || !hasLocal(id)) return null;
+    const b = await loadBible(id); const ch = b && b[p.idx] && b[p.idx][+p.ch - 1]; if (!ch) return null;
+    const v1 = +p.v, v2 = +(p.v2 || p.v); if (v2 < v1 || v2 > ch.length) return null;
+    return ch.slice(v1 - 1, v2).join(' ');
+  }
+  // doplní prázdne preklady verša, ktoré máme v appke; vráti počet doplnených
+  async function autoFill(x) {
+    let n = 0;
+    for (const id of Object.keys(x.preklady)) {
+      if (x.preklady[id].trim() || !hasLocal(id)) continue;
+      const t = await lookup(id, x.ref); if (t) { x.preklady[id] = t; n++; }
+    }
+    return n;
+  }
+  const newVerse = ref => ({ ref, strong: [], preklady: Object.fromEntries(PREKLADY.filter(p => p.zaklad || p.lokalny).map(p => [p.id, ''])) });
+  // Zefania XML alebo JSON -> [kniha][kapitola][verš]
+  function parseBible(text) {
+    const out = Array.from({ length: 66 }, () => []);
+    if (text.trim()[0] === '<') {
+      const xml = new DOMParser().parseFromString(text, 'text/xml');
+      xml.querySelectorAll('BIBLEBOOK').forEach(b => { const bi = +b.getAttribute('bnumber') - 1; if (!out[bi]) return;
+        b.querySelectorAll('CHAPTER').forEach(c => { out[bi][+c.getAttribute('cnumber') - 1] = [...c.querySelectorAll('VERS')].map(v => v.textContent.trim()); }); });
+    } else {
+      const j = JSON.parse(text);
+      if (Array.isArray(j)) return j;
+      (j.books || []).forEach((b, bi) => { out[bi] = (b.chapters || []).map(c => (c.verses || []).map(v => (v.text || '').trim())); });
+    }
+    if (out.filter(b => b.length).length < 27) throw new Error('málo kníh');
+    return out;
+  }
+
   // ===== verejné záložky =====
   function renderPublic() {
     const openState = {};
@@ -73,24 +117,25 @@
     v.replaceChildren(); r.replaceChildren(); m.replaceChildren();
 
     const V = db.vyznavanie;
-    v.append(el('div', 'card lead', `<h2>${esc(V.uvod.nadpis)}</h2>${paras(V.uvod.text)}`), el('div', 'section-label', 'Kategórie'));
-    V.kategorie.forEach(k => v.append(acc(esc(k.nazov), '', paras(k.text))));
+    const lead = el('div', 'card lead', `<h2>${esc(V.uvod.nadpis)}</h2>${paras(V.uvod.text)}`); lead.dataset.edit = 'vi';
+    v.append(lead, el('div', 'section-label', 'Kategórie'));
+    V.kategorie.forEach((k, i) => { const c = acc(esc(k.nazov), '', paras(k.text)); c.dataset.edit = 'v:' + i; v.append(c); });
 
     if (!db.remy.length) r.append(el('div', 'empty', 'Zatiaľ žiadne verše. Pridaj ich v záložke Správa.'));
-    db.remy.forEach(x => {
+    db.remy.forEach((x, xi) => {
       const keys = Object.keys(x.preklady).filter(k => x.preklady[k].trim());
       const preview = keys.length ? x.preklady[keys[0]] : '';
       let body = keys.map(k => `<div class="tr"><b>${esc(k)}</b>${esc(x.preklady[k])}</div>`).join('');
       const st = (x.strong || []).filter(s => s.cislo || s.slovo);
       if (st.length) body += `<div class="section-label">Strong</div>` + st.map(s => `<div class="tr"><b>${esc(s.cislo)}</b><span class="orig">${esc(s.slovo)}</span> ${s.prepis ? `<i>${esc(s.prepis)}</i>` : ''}${s.en ? `<br>EN: ${esc(s.en)}` : ''}${s.sk ? `<br>SK: ${esc(s.sk)}` : ''}</div>`).join('');
       if (!body) body = '<p class="empty">Zatiaľ bez textu.</p>';
-      r.append(acc(`<span class="ref">${esc(x.ref)}</span>`, keys.length + ' prekl.', body, false, preview));
+      const rc = acc(`<span class="ref">${esc(x.ref)}</span>`, keys.length + ' prekl.', body, false, preview); rc.dataset.edit = 'r:' + xi; r.append(rc);
     });
 
     if (db.modlitby.length) m.append(el('p', 'hint', 'Klikni na slovo, aby si ho označil ako dnes pomodlené.'));
-    db.modlitby.forEach(k => {
-      const body = `<div class="chips">${k.slova.map(s => `<span class="chip${done[k.nazov + '|' + s] ? ' on' : ''}" data-k="${esc(k.nazov + '|' + s)}">${esc(s)}</span>`).join('')}</div>`;
-      m.append(acc(esc(k.nazov), k.slova.length, body));
+    db.modlitby.forEach((k, ki) => {
+      const body = `<div class="chips">${k.slova.map((s, si) => `<span class="chip${done[k.nazov + '|' + s] ? ' on' : ''}" data-k="${esc(k.nazov + '|' + s)}" data-edit="c:${ki}:${si}">${esc(s)}</span>`).join('')}</div>`;
+      const mc = acc(esc(k.nazov), k.slova.length, body); mc.dataset.edit = 'm:' + ki; m.append(mc);
     });
     m.querySelectorAll('.chip').forEach(c => c.onclick = () => { c.classList.toggle('on'); if (c.classList.contains('on')) done[c.dataset.k] = 1; else delete done[c.dataset.k]; saveDone(); });
 
@@ -142,7 +187,7 @@
         fld('Odkaz (napr. Ján 3,16)', 'input', x.ref) +
         keys.map(k => `<div class="tr-edit">${fld('Preklad (skratka)', 'input', k)}${fld('Text', 'textarea', x.preklady[k], 3)}<div class="row-actions"><a class="btn small" data-find target="_blank" rel="noopener">Nájsť ↗</a><button class="btn small danger" data-deltr>Zmazať preklad</button></div></div>`).join('') +
         `<label class="fld"><span>Pridať preklad</span><select data-pick>${PREKLADY.filter(p => !(p.id in x.preklady)).map(p => `<option value="${esc(p.id)}">${esc(p.nazov)}</option>`).join('')}<option value="">Vlastný…</option></select></label>` +
-        `<div class="row-actions"><button class="btn small" data-addtr>+ Preklad</button></div>` +
+        `<div class="row-actions"><button class="btn small" data-addtr>+ Preklad</button><button class="btn small" data-auto>⟳ Doplniť z appky</button></div>` +
         `<div class="section-label">Strong (hebrejčina / gréčtina)</div><div class="row-actions"><a class="btn small" data-findst target="_blank" rel="noopener">Nájsť Strong (BibleHub) ↗</a></div>` +
         (x.strong || []).map(s => `<div class="tr-edit st-edit">${fld('Číslo (napr. G26, H430)', 'input', s.cislo)}${fld('Pôvodné slovo', 'input', s.slovo)}${fld('Prepis', 'input', s.prepis)}${fld('Význam EN', 'input', s.en)}${fld('Význam SK', 'input', s.sk)}<div class="row-actions"><button class="btn small danger" data-delst>Zmazať</button></div></div>`).join('') +
         `<div class="row-actions"><button class="btn small" data-addst>+ Strong</button><button class="btn small danger" data-delv>Zmazať verš</button></div>`);
@@ -164,12 +209,13 @@
       refresh(); refInp.addEventListener('input', refresh);
       texts.forEach((t, i) => t.addEventListener('input', () => { x.preklady[keys[i]] = t.value; save(); }));
       btn(d, '[data-deltr]', i => { delete x.preklady[keys[i]]; save(); renderAdmin(); });
-      btn(d, '[data-addtr]', () => { let k = d.querySelector('[data-pick]').value || 'Nový', c = 1; while (k in x.preklady) k = 'Nový ' + (++c); x.preklady[k] = ''; save(); renderAdmin(); });
+      btn(d, '[data-addtr]', async () => { let k = d.querySelector('[data-pick]').value || 'Nový', c = 1; while (k in x.preklady) k = 'Nový ' + (++c); x.preklady[k] = ''; await autoFill(x); save(); renderAdmin(); });
+      btn(d, '[data-auto]', async () => { const n = await autoFill(x); if (!n) alert('Nič sa nedoplnilo. Skontroluj odkaz (napr. „Ján 3,16“) a či je preklad v appke (KJV, Kralická alebo importovaný).'); save(); renderAdmin(); });
       btn(d, '[data-delv]', () => { if (confirm('Zmazať verš ' + x.ref + '?')) { db.remy.splice(vi, 1); save(); renderAdmin(); } });
       a.append(d);
     });
     const addR = el('button', 'btn', '+ Pridať verš'); addR.style.marginBottom = '14px';
-    addR.onclick = () => { db.remy.push({ ref: 'Nový verš', strong: [], preklady: Object.fromEntries(PREKLADY.filter(p => p.zaklad).map(p => [p.id, ''])) }); save(); renderAdmin(); };
+    addR.onclick = () => { db.remy.push(newVerse('Nový verš')); save(); renderAdmin(); };
     a.append(addR);
 
     // --- M ---
@@ -181,6 +227,16 @@
       btn(d, '[data-del]', () => { if (confirm('Zmazať kategóriu ' + k.nazov + '?')) { db.modlitby.splice(i, 1); save(); renderAdmin(); } });
       a.append(d);
     });
+    a.append(el('div', 'section-label', 'Preklady v appke'));
+    const stat = PREKLADY.map(p => `<div class="tr"><b>${esc(p.id)}</b>${esc(p.nazov)} – ${p.lokalny ? 'vstavaný' : imported.has(p.id) ? 'importovaný' : 'zatiaľ nie je (vkladáš ručne alebo importuj)'}</div>`).join('');
+    const imp = sec('Importovať preklad', '', `<p class="note">Vyber súbor s Bibliou (Zefania XML alebo JSON). Uloží sa len v tomto zariadení a potom sa verše doplnia automaticky.</p>${stat}<label class="fld" style="margin-top:12px"><span>Pre preklad</span><select id="impId">${PREKLADY.filter(p => !p.lokalny).map(p => `<option value="${esc(p.id)}">${esc(p.nazov)}</option>`).join('')}</select></label><div class="row-actions"><button class="btn small primary" id="impBible">Vybrať súbor</button><input type="file" id="impFile" accept=".xml,.json,text/xml,application/json" hidden></div>`);
+    a.append(imp);
+    $('#impBible', imp).onclick = () => $('#impFile', imp).click();
+    $('#impFile', imp).onchange = async e => {
+      const f = e.target.files[0]; if (!f) return; const id = $('#impId', imp).value;
+      try { const data = parseBible(await f.text()); await idbOp('readwrite', s => s.put(data, id)); imported.add(id); delete cache[id]; alert('Preklad ' + id + ' je v appke. Doplň verše tlačidlom „Doplniť z appky“.'); renderAdmin(); }
+      catch (err) { alert('Súbor sa nepodarilo načítať: ' + (err.message || 'neplatný formát')); }
+    };
     const addM = el('button', 'btn', '+ Pridať kategóriu');
     addM.onclick = () => { db.modlitby.push({ nazov: 'Nová kategória', slova: [] }); save(); renderAdmin(); };
     a.append(addM);
@@ -218,13 +274,14 @@
   $('#fab').onclick = () => {
     const tab = document.querySelector('.tabs [aria-selected=true]').dataset.tab;
     if (tab === 'R') {
-      openSheet(`<h3>Nový verš</h3>${fld('Odkaz (napr. Ján 3,16)', 'input', '').replace('<input', '<input name="ref" required')}<p class="note">Preklady a Strong doplníš v Správe.</p>`, fd => {
+      openSheet(`<h3>Nový verš</h3>${fld('Odkaz (napr. Ján 3,16)', 'input', '').replace('<input', '<input name="ref" required')}<p class="note">Text sa vloží automaticky z prekladov v appke (KJV, Kralická, importované).</p>`, fd => {
         const ref = fd.get('ref').trim(); if (!ref) return false;
-        db.remy.push({ ref, strong: [], preklady: Object.fromEntries(PREKLADY.filter(p => p.zaklad).map(p => [p.id, ''])) });
-        save();
-        const open = []; open[2 + db.remy.length - 1] = true;
-        renderAdmin(open); show('A');
-        setTimeout(() => { const d = $('#A details[open]'); if (d) d.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, 100);
+        if (!parseRef(ref)) { alert('Odkaz nepoznám. Skús napr. „Ján 3,16“ alebo „1. Korintským 13,4-7“.'); return false; }
+        const x = newVerse(ref);
+        autoFill(x).then(n => {
+          db.remy.push(x); save();
+          if (!n) alert('Verš je pridaný, ale text sa nenašiel (skontroluj číslo kapitoly a verša).');
+        });
       });
     } else if (tab === 'M') {
       const opts = db.modlitby.map((k, i) => `<option value="${i}">${esc(k.nazov)}</option>`).join('');
@@ -247,6 +304,45 @@
       sel.onchange = sync; sync();
     }
   };
+
+  // ===== úprava podržaním =====
+  const sheetBtns = (del) => `<div class="row-actions"><button class="btn primary" type="submit">Uložiť</button><button class="btn" type="button" id="shCancel">Zrušiť</button>${del ? '<button class="btn danger" type="button" id="shDel">Zmazať</button>' : ''}</div>`;
+  function openEdit(html, onSave, onDelete) {
+    form.innerHTML = html + sheetBtns(!!onDelete);
+    $('#shCancel').onclick = closeSheet;
+    if (onDelete) $('#shDel').onclick = () => { if (confirm('Naozaj zmazať?')) { onDelete(); save(); renderAdmin(); closeSheet(); } };
+    form.onsubmit = e => { e.preventDefault(); onSave(new FormData(form)); save(); renderAdmin(); closeSheet(); };
+    sheet.hidden = false;
+  }
+  const nm = (h, n) => h.replace(/<(input|textarea)/, `<$1 name="${n}"`);
+  function editFor(kind) {
+    const [t, i, j] = kind.split(':'), ix = +i;
+    if (t === 'vi') { const u = db.vyznavanie.uvod; return openEdit(`<h3>Úprava úvodu</h3>${nm(fld('Nadpis', 'input', u.nadpis), 'n')}${nm(fld('Text (odseky oddeľ prázdnym riadkom)', 'textarea', u.text.join('\n\n'), 10), 't')}`, fd => { u.nadpis = fd.get('n'); u.text = blocks(fd.get('t')); }); }
+    if (t === 'v') { const k = db.vyznavanie.kategorie[ix]; return openEdit(`<h3>Úprava kategórie</h3>${nm(fld('Názov', 'input', k.nazov), 'n')}${nm(fld('Text', 'textarea', k.text.join('\n\n'), 8), 't')}`, fd => { k.nazov = fd.get('n'); k.text = blocks(fd.get('t')); }, () => db.vyznavanie.kategorie.splice(ix, 1)); }
+    if (t === 'm') { const k = db.modlitby[ix]; return openEdit(`<h3>Úprava kategórie</h3>${nm(fld('Názov', 'input', k.nazov), 'n')}${nm(fld('Slová (každé na nový riadok)', 'textarea', k.slova.join('\n'), 7), 's')}`, fd => { k.nazov = fd.get('n'); k.slova = lines(fd.get('s')); }, () => db.modlitby.splice(ix, 1)); }
+    if (t === 'c') { const k = db.modlitby[ix]; return openEdit(`<h3>Úprava slova</h3>${nm(fld('Slovo / spojenie', 'input', k.slova[+j]), 'w')}`, fd => { const w = fd.get('w').trim(); if (w) k.slova[+j] = w; else k.slova.splice(+j, 1); }, () => k.slova.splice(+j, 1)); }
+    if (t === 'r') {
+      const x = db.remy[ix], keys = Object.keys(x.preklady);
+      return openEdit(`<h3>Úprava verša</h3>${nm(fld('Odkaz', 'input', x.ref), 'ref')}` + keys.map((k, n) => nm(fld(k, 'textarea', x.preklady[k], 3), 'p' + n)).join('') + `<button class="btn small" type="button" id="shAuto">⟳ Doplniť z appky</button><p></p>`, fd => {
+        x.ref = fd.get('ref').trim() || x.ref; keys.forEach((k, n) => x.preklady[k] = fd.get('p' + n));
+      }, () => db.remy.splice(ix, 1)), $('#shAuto').addEventListener('click', async () => {
+        x.ref = form.elements.ref.value.trim() || x.ref; keys.forEach((k, n) => x.preklady[k] = form.elements['p' + n].value);
+        const c = await autoFill(x); keys.forEach((k, n) => form.elements['p' + n].value = x.preklady[k]); if (!c) alert('Nič sa nedoplnilo (skontroluj odkaz alebo či je preklad v appke).');
+      });
+    }
+  }
+  let lp = null, lpFired = false;
+  document.addEventListener('pointerdown', e => {
+    const t = e.target.closest('#V [data-edit], #R [data-edit], #M [data-edit]'); if (!t) return;
+    const target = e.target.closest('.chip[data-edit]') || t;
+    const sx = e.clientX, sy = e.clientY; lpFired = false;
+    lp = setTimeout(() => { lpFired = true; if (navigator.vibrate) navigator.vibrate(18); editFor(target.dataset.edit); }, 550);
+    const cancel = ev => { if (ev.type === 'pointermove' && Math.hypot(ev.clientX - sx, ev.clientY - sy) < 8) return; clearTimeout(lp); document.removeEventListener('pointermove', cancel); document.removeEventListener('pointerup', cancel); document.removeEventListener('pointercancel', cancel); };
+    document.addEventListener('pointermove', cancel); document.addEventListener('pointerup', cancel); document.addEventListener('pointercancel', cancel);
+  });
+  // po dlhom podržaní nerozbaľuj / neoznačuj
+  document.addEventListener('click', e => { if (lpFired) { e.preventDefault(); e.stopImmediatePropagation(); lpFired = false; } }, true);
+  document.addEventListener('contextmenu', e => { if (e.target.closest('#V [data-edit], #R [data-edit], #M [data-edit]')) e.preventDefault(); });
 
   // ===== záložky =====
   const names = { V: 'Vyznávanie', R: 'Rémy', M: 'Modlitby', A: 'Správa' };

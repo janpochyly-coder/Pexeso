@@ -21,10 +21,10 @@ const PREKLADY = [
   { id: "ROH", nazov: "Roháčkov (pôvodný)", zaklad: true },
   { id: "EVJ", nazov: "Evanjelický", zaklad: true },
   { id: "SEB", nazov: "Ekumenický (SEB)", zaklad: true },
-  { id: "BKR", nazov: "Bible kralická" },
+  { id: "BKR", nazov: "Bible kralická", lokalny: true },
   { id: "B21", nazov: "Bible 21" },
   { id: "ČSP", nazov: "Studijní překlad" },
-  { id: "KJV", nazov: "King James (KJV)" }
+  { id: "KJV", nazov: "King James (KJV)", lokalny: true }
 ];
 
 // R – Rémy (verše vo viacerých prekladoch)
