@@ -16,11 +16,23 @@ const VYZNAVANIE = {
   ]
 };
 
+// Katalóg prekladov: ZAKLAD = vždy predvyplnené pri novom verši
+const PREKLADY = [
+  { id: "ROH", nazov: "Roháčkov (pôvodný)", zaklad: true },
+  { id: "EVJ", nazov: "Evanjelický", zaklad: true },
+  { id: "SEB", nazov: "Ekumenický (SEB)", zaklad: true },
+  { id: "BKR", nazov: "Bible kralická" },
+  { id: "B21", nazov: "Bible 21" },
+  { id: "ČSP", nazov: "Studijní překlad" },
+  { id: "KJV", nazov: "King James (KJV)" }
+];
+
 // R – Rémy (verše vo viacerých prekladoch)
 // Skratky prekladov: SEB, ROH, KJV ... (ľubovoľné)
 const REMY = [
   {
     ref: "Ján 3,16",
+    strong: [],
     preklady: {
       "ROH": "Lebo tak Boh miloval svet, že Syna svojho jednorodeného dal, aby každý, kto verí v neho, nezahynul, ale mal život večný.",
       "KJV": "For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life."

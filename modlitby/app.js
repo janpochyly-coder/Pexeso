@@ -33,8 +33,11 @@
 
     if (!db.remy.length) r.append(el('div', 'empty', 'Zatiaľ žiadne verše. Pridaj ich v záložke Správa.'));
     db.remy.forEach(x => {
-      const keys = Object.keys(x.preklady);
-      const body = keys.map(k => `<div class="tr"><b>${esc(k)}</b>${esc(x.preklady[k])}</div>`).join('');
+      const keys = Object.keys(x.preklady).filter(k => x.preklady[k].trim());
+      let body = keys.map(k => `<div class="tr"><b>${esc(k)}</b>${esc(x.preklady[k])}</div>`).join('');
+      const st = (x.strong || []).filter(s => s.cislo || s.slovo);
+      if (st.length) body += `<div class="section-label">Strong</div>` + st.map(s => `<div class="tr"><b>${esc(s.cislo)}</b><span class="orig">${esc(s.slovo)}</span> ${s.prepis ? `<i>${esc(s.prepis)}</i>` : ''}${s.en ? `<br>EN: ${esc(s.en)}` : ''}${s.sk ? `<br>SK: ${esc(s.sk)}` : ''}</div>`).join('');
+      if (!body) body = '<p class="empty">Zatiaľ bez textu.</p>';
       r.append(acc(`<span class="ref">${esc(x.ref)}</span>`, keys.length + ' prekl.', body));
     });
 
@@ -90,10 +93,19 @@
       const d = sec(`<span class="ref">${esc(x.ref)}</span>`, keys.length + ' prekl.',
         fld('Odkaz (napr. Ján 3,16)', 'input', x.ref) +
         keys.map(k => `<div class="tr-edit">${fld('Preklad (skratka)', 'input', k)}${fld('Text', 'textarea', x.preklady[k], 3)}<div class="row-actions"><button class="btn small danger" data-deltr>Zmazať preklad</button></div></div>`).join('') +
-        `<div class="row-actions"><button class="btn small" data-addtr>+ Preklad</button><button class="btn small danger" data-delv>Zmazať verš</button></div>`);
+        `<label class="fld"><span>Pridať preklad</span><select data-pick>${PREKLADY.filter(p => !(p.id in x.preklady)).map(p => `<option value="${esc(p.id)}">${esc(p.nazov)}</option>`).join('')}<option value="">Vlastný…</option></select></label>` +
+        `<div class="row-actions"><button class="btn small" data-addtr>+ Preklad</button></div>` +
+        `<div class="section-label">Strong (hebrejčina / gréčtina)</div>` +
+        (x.strong || []).map(s => `<div class="tr-edit st-edit">${fld('Číslo (napr. G26, H430)', 'input', s.cislo)}${fld('Pôvodné slovo', 'input', s.slovo)}${fld('Prepis', 'input', s.prepis)}${fld('Význam EN', 'input', s.en)}${fld('Význam SK', 'input', s.sk)}<div class="row-actions"><button class="btn small danger" data-delst>Zmazať</button></div></div>`).join('') +
+        `<div class="row-actions"><button class="btn small" data-addst>+ Strong</button><button class="btn small danger" data-delv>Zmazať verš</button></div>`);
       const refInp = d.querySelector('.fld input');
       refInp.addEventListener('input', () => { x.ref = refInp.value; save(); });
-      const names = [...d.querySelectorAll('.tr-edit .fld:first-child input')], texts = [...d.querySelectorAll('.tr-edit textarea')];
+      const names = [...d.querySelectorAll('.tr-edit:not(.st-edit) .fld:first-child input')], texts = [...d.querySelectorAll('.tr-edit textarea')];
+      if (!x.strong) x.strong = [];
+      d.querySelectorAll('.st-edit').forEach((box, si) => ['cislo', 'slovo', 'prepis', 'en', 'sk'].forEach((f, fi) =>
+        box.querySelectorAll('input')[fi].addEventListener('input', e => { x.strong[si][f] = e.target.value; save(); })));
+      btn(d, '[data-delst]', i => { x.strong.splice(i, 1); save(); renderAdmin(); });
+      btn(d, '[data-addst]', () => { x.strong.push({ cislo: '', slovo: '', prepis: '', en: '', sk: '' }); save(); renderAdmin(); });
       // názvy prekladov: premenovanie až po opustení poľa (zachová poradie)
       names.forEach((inp, i) => inp.addEventListener('change', () => {
         const old = keys[i], neu = inp.value.trim() || old;
@@ -102,12 +114,12 @@
       }));
       texts.forEach((t, i) => t.addEventListener('input', () => { x.preklady[keys[i]] = t.value; save(); }));
       btn(d, '[data-deltr]', i => { delete x.preklady[keys[i]]; save(); renderAdmin(); });
-      btn(d, '[data-addtr]', () => { let k = 'Nový', c = 1; while (k in x.preklady) k = 'Nový ' + (++c); x.preklady[k] = ''; save(); renderAdmin(); });
+      btn(d, '[data-addtr]', () => { let k = d.querySelector('[data-pick]').value || 'Nový', c = 1; while (k in x.preklady) k = 'Nový ' + (++c); x.preklady[k] = ''; save(); renderAdmin(); });
       btn(d, '[data-delv]', () => { if (confirm('Zmazať verš ' + x.ref + '?')) { db.remy.splice(vi, 1); save(); renderAdmin(); } });
       a.append(d);
     });
     const addR = el('button', 'btn', '+ Pridať verš'); addR.style.marginBottom = '14px';
-    addR.onclick = () => { db.remy.push({ ref: 'Nový verš', preklady: {} }); save(); renderAdmin(); };
+    addR.onclick = () => { db.remy.push({ ref: 'Nový verš', strong: [], preklady: Object.fromEntries(PREKLADY.filter(p => p.zaklad).map(p => [p.id, ''])) }); save(); renderAdmin(); };
     a.append(addR);
 
     // --- M ---
