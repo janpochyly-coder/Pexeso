@@ -165,3 +165,24 @@ details.acc[open] > summary .s-title, details.acc[open] > summary { color: var(-
 }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 details.acc[open] .s-prev { display: none; }
+
+/* tlačidlo + a vyskakovacie okno */
+.fab {
+  position: fixed; right: max(18px, calc(50% - 380px + 18px)); bottom: calc(104px + env(safe-area-inset-bottom)); z-index: 9;
+  width: 58px; height: 58px; border-radius: 50%; border: 0; cursor: pointer; background: var(--accent); color: var(--accent-ink);
+  display: grid; place-items: center; box-shadow: 0 14px 28px -8px var(--accent); transition: transform .2s cubic-bezier(.2,.7,.2,1);
+}
+.fab[hidden] { display: none; }
+.fab:hover { transform: rotate(90deg) scale(1.05); } .fab:active { transform: scale(.9); }
+.fab svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
+.sheet { position: fixed; inset: 0; z-index: 20; display: flex; align-items: flex-end; justify-content: center; }
+.sheet[hidden] { display: none; }
+.sheet-bg { position: absolute; inset: 0; background: rgba(10,8,5,.45); backdrop-filter: blur(3px); animation: fade .25s; }
+.sheet-box {
+  position: relative; width: min(100%, 520px); background: var(--card); border-radius: 26px 26px 0 0; padding: 24px 22px calc(24px + env(safe-area-inset-bottom));
+  box-shadow: 0 -20px 50px -20px rgba(0,0,0,.4); animation: slideup .35s cubic-bezier(.2,.7,.2,1);
+}
+.sheet-box h3 { margin: 0 0 16px; font: 600 1.3rem var(--serif); }
+@keyframes fade { from { opacity: 0; } }
+@keyframes slideup { from { transform: translateY(40px); opacity: 0; } }
+@media (min-width: 700px) { .sheet { align-items: center; } .sheet-box { border-radius: 26px; } }

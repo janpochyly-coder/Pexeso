@@ -204,11 +204,56 @@
 
   renderPublic(); renderAdmin([]);
 
+  // ===== tlačidlo + (R, M) =====
+  const sheet = $('#sheet'), form = $('#sheetForm');
+  const closeSheet = () => { sheet.hidden = true; };
+  sheet.querySelector('.sheet-bg').onclick = closeSheet;
+  function openSheet(html, onSubmit) {
+    form.innerHTML = html + `<div class="row-actions"><button class="btn primary" type="submit">Pridať</button><button class="btn" type="button" id="shCancel">Zrušiť</button></div>`;
+    $('#shCancel').onclick = closeSheet;
+    form.onsubmit = e => { e.preventDefault(); if (onSubmit(new FormData(form)) !== false) closeSheet(); };
+    sheet.hidden = false;
+    const f = form.querySelector('input,textarea'); if (f) setTimeout(() => f.focus(), 50);
+  }
+  $('#fab').onclick = () => {
+    const tab = document.querySelector('.tabs [aria-selected=true]').dataset.tab;
+    if (tab === 'R') {
+      openSheet(`<h3>Nový verš</h3>${fld('Odkaz (napr. Ján 3,16)', 'input', '').replace('<input', '<input name="ref" required')}<p class="note">Preklady a Strong doplníš v Správe.</p>`, fd => {
+        const ref = fd.get('ref').trim(); if (!ref) return false;
+        db.remy.push({ ref, strong: [], preklady: Object.fromEntries(PREKLADY.filter(p => p.zaklad).map(p => [p.id, ''])) });
+        save();
+        const open = []; open[2 + db.remy.length - 1] = true;
+        renderAdmin(open); show('A');
+        setTimeout(() => { const d = $('#A details[open]'); if (d) d.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, 100);
+      });
+    } else if (tab === 'M') {
+      const opts = db.modlitby.map((k, i) => `<option value="${i}">${esc(k.nazov)}</option>`).join('');
+      openSheet(`<h3>Pridať do modlitieb</h3>
+        <label class="fld"><span>Kategória</span><select name="cat" id="shCat">${opts}<option value="new">➕ Nová kategória…</option></select></label>
+        <div id="shNew" hidden>${fld('Názov novej kategórie', 'input', '').replace('<input', '<input name="nazov"')}</div>
+        ${fld('Slová / spojenia (každé na nový riadok)', 'textarea', '', 4).replace('<textarea', '<textarea name="slova"')}`, fd => {
+        const slova = lines(fd.get('slova') || '');
+        let k;
+        if (fd.get('cat') === 'new') {
+          const nazov = (fd.get('nazov') || '').trim(); if (!nazov) return false;
+          k = { nazov, slova: [] }; db.modlitby.push(k);
+        } else k = db.modlitby[+fd.get('cat')];
+        k.slova.push(...slova);
+        save(); renderAdmin();
+      });
+      const sel = $('#shCat'), nw = $('#shNew');
+      const sync = () => { nw.hidden = sel.value !== 'new'; };
+      if (!db.modlitby.length) sel.value = 'new';
+      sel.onchange = sync; sync();
+    }
+  };
+
   // ===== záložky =====
   const names = { V: 'Vyznávanie', R: 'Rémy', M: 'Modlitby', A: 'Správa' };
   function show(t) {
     document.querySelectorAll('.view').forEach(s => s.hidden = s.id !== t);
     document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === t));
+    $('#fab').hidden = !(t === 'R' || t === 'M');
     $('#title').textContent = names[t];
     $('#eyebrow').textContent = new Date().toLocaleDateString('sk-SK', { weekday: 'long', day: 'numeric', month: 'long' });
     try { localStorage.setItem('modlitby-tab', t); } catch (e) {}
