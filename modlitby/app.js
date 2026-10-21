@@ -20,6 +20,28 @@
     return d;
   }
 
+  // ===== odkaz na verš -> adresy zdrojov =====
+  const norm = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z]/g, '');
+  function parseRef(ref) {
+    const m = ref.match(/^\s*([1-3])?\s*\.?\s*([^\d]+?)\s*(\d+)\s*[,:.]\s*(\d+)(?:\s*[-–]\s*(\d+))?\s*$/);
+    if (!m) return null;
+    const num = +(m[1] || 0), name = norm(m[2]);
+    if (name.length < 2) return null;
+    const hit = KNIHY.find(k => (k[0] === num || (!num && !k[0])) && k[3].some(x => name === x || (name.length >= 3 && x.startsWith(name)))) ||
+      KNIHY.find(k => k[0] === num && k[3].some(x => name === x));
+    if (!hit) return null;
+    return { slug: hit[1], en: hit[2], ch: m[3], v: m[4], v2: m[5] };
+  }
+  function findUrl(id, ref) {
+    const p = parseRef(ref), name = (PREKLADY.find(t => t.id === id) || {}).nazov || id;
+    if (p && ZDROJE[id]) return ZDROJE[id].replace('{q}', encodeURIComponent(`${p.en} ${p.ch}:${p.v}${p.v2 ? '-' + p.v2 : ''}`));
+    return 'https://www.google.com/search?q=' + encodeURIComponent(`${ref} ${name} biblia`);
+  }
+  function strongUrl(ref) {
+    const p = parseRef(ref);
+    return p ? ZDROJ_STRONG.replace('{slug}', p.slug).replace('{ch}', p.ch).replace('{v}', p.v) : 'https://www.google.com/search?q=' + encodeURIComponent(ref + ' strong interlinear');
+  }
+
   // ===== verejné záložky =====
   function renderPublic() {
     const openState = {};
@@ -92,10 +114,10 @@
       const keys = Object.keys(x.preklady);
       const d = sec(`<span class="ref">${esc(x.ref)}</span>`, keys.length + ' prekl.',
         fld('Odkaz (napr. Ján 3,16)', 'input', x.ref) +
-        keys.map(k => `<div class="tr-edit">${fld('Preklad (skratka)', 'input', k)}${fld('Text', 'textarea', x.preklady[k], 3)}<div class="row-actions"><button class="btn small danger" data-deltr>Zmazať preklad</button></div></div>`).join('') +
+        keys.map(k => `<div class="tr-edit">${fld('Preklad (skratka)', 'input', k)}${fld('Text', 'textarea', x.preklady[k], 3)}<div class="row-actions"><a class="btn small" data-find target="_blank" rel="noopener">Nájsť ↗</a><button class="btn small danger" data-deltr>Zmazať preklad</button></div></div>`).join('') +
         `<label class="fld"><span>Pridať preklad</span><select data-pick>${PREKLADY.filter(p => !(p.id in x.preklady)).map(p => `<option value="${esc(p.id)}">${esc(p.nazov)}</option>`).join('')}<option value="">Vlastný…</option></select></label>` +
         `<div class="row-actions"><button class="btn small" data-addtr>+ Preklad</button></div>` +
-        `<div class="section-label">Strong (hebrejčina / gréčtina)</div>` +
+        `<div class="section-label">Strong (hebrejčina / gréčtina)</div><div class="row-actions"><a class="btn small" data-findst target="_blank" rel="noopener">Nájsť Strong (BibleHub) ↗</a></div>` +
         (x.strong || []).map(s => `<div class="tr-edit st-edit">${fld('Číslo (napr. G26, H430)', 'input', s.cislo)}${fld('Pôvodné slovo', 'input', s.slovo)}${fld('Prepis', 'input', s.prepis)}${fld('Význam EN', 'input', s.en)}${fld('Význam SK', 'input', s.sk)}<div class="row-actions"><button class="btn small danger" data-delst>Zmazať</button></div></div>`).join('') +
         `<div class="row-actions"><button class="btn small" data-addst>+ Strong</button><button class="btn small danger" data-delv>Zmazať verš</button></div>`);
       const refInp = d.querySelector('.fld input');
@@ -112,6 +134,8 @@
         x.preklady = Object.fromEntries(Object.entries(x.preklady).map(([k, t]) => [k === old ? neu : k, t]));
         save(); renderAdmin();
       }));
+      const refresh = () => { d.querySelectorAll('[data-find]').forEach((l, i) => l.href = findUrl(keys[i], x.ref)); d.querySelector('[data-findst]').href = strongUrl(x.ref); };
+      refresh(); refInp.addEventListener('input', refresh);
       texts.forEach((t, i) => t.addEventListener('input', () => { x.preklady[keys[i]] = t.value; save(); }));
       btn(d, '[data-deltr]', i => { delete x.preklady[keys[i]]; save(); renderAdmin(); });
       btn(d, '[data-addtr]', () => { let k = d.querySelector('[data-pick]').value || 'Nový', c = 1; while (k in x.preklady) k = 'Nový ' + (++c); x.preklady[k] = ''; save(); renderAdmin(); });
