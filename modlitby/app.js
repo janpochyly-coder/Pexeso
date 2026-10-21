@@ -13,12 +13,35 @@
   let saveMsg = '';
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(db)); } catch (e) { alert('Uloženie zlyhalo (úložisko je plné alebo blokované).'); } renderPublic(); };
 
-  function acc(title, sub, bodyHtml, open) {
+  function acc(title, sub, bodyHtml, open, preview) {
     const d = el('details', 'card acc');
     if (open) d.open = true;
-    d.innerHTML = `<summary>${title}${sub ? `<span class="sub">${sub}</span>` : ''}</summary><div class="body">${bodyHtml}</div>`;
+    d.innerHTML = `<summary><span class="s-main"><span class="s-title">${title}</span>${preview ? `<span class="s-prev">${esc(preview)}</span>` : ''}</span>${sub ? `<span class="sub">${sub}</span>` : ''}</summary><div class="body">${bodyHtml}</div>`;
     return d;
   }
+
+  // plynulé rozbaľovanie / zbaľovanie
+  document.addEventListener('click', e => {
+    const s = e.target.closest('details.acc > summary');
+    if (!s) return;
+    e.preventDefault();
+    const d = s.parentNode, body = d.querySelector('.body');
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) { d.open = !d.open; return; }
+    const opts = { duration: 320, easing: 'cubic-bezier(.2,.7,.2,1)' };
+    if (d.open) {
+      const h = body.offsetHeight;
+      body.animate([{ height: h + 'px', opacity: 1 }, { height: '0px', opacity: 0 }], opts).onfinish = () => { d.open = false; };
+    } else {
+      d.open = true;
+      body.animate([{ height: '0px', opacity: 0 }, { height: body.offsetHeight + 'px', opacity: 1 }], opts);
+    }
+  });
+
+  // označenie slov v Modlitbách (platí na dnešný deň)
+  const today = new Date().toISOString().slice(0, 10);
+  let done = {};
+  try { const o = JSON.parse(localStorage.getItem('modlitby-done')); if (o && o.d === today) done = o.s; } catch (e) {}
+  const saveDone = () => { try { localStorage.setItem('modlitby-done', JSON.stringify({ d: today, s: done })); } catch (e) {} };
 
   // ===== odkaz na verš -> adresy zdrojov =====
   const norm = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z]/g, '');
@@ -56,17 +79,20 @@
     if (!db.remy.length) r.append(el('div', 'empty', 'Zatiaľ žiadne verše. Pridaj ich v záložke Správa.'));
     db.remy.forEach(x => {
       const keys = Object.keys(x.preklady).filter(k => x.preklady[k].trim());
+      const preview = keys.length ? x.preklady[keys[0]] : '';
       let body = keys.map(k => `<div class="tr"><b>${esc(k)}</b>${esc(x.preklady[k])}</div>`).join('');
       const st = (x.strong || []).filter(s => s.cislo || s.slovo);
       if (st.length) body += `<div class="section-label">Strong</div>` + st.map(s => `<div class="tr"><b>${esc(s.cislo)}</b><span class="orig">${esc(s.slovo)}</span> ${s.prepis ? `<i>${esc(s.prepis)}</i>` : ''}${s.en ? `<br>EN: ${esc(s.en)}` : ''}${s.sk ? `<br>SK: ${esc(s.sk)}` : ''}</div>`).join('');
       if (!body) body = '<p class="empty">Zatiaľ bez textu.</p>';
-      r.append(acc(`<span class="ref">${esc(x.ref)}</span>`, keys.length + ' prekl.', body));
+      r.append(acc(`<span class="ref">${esc(x.ref)}</span>`, keys.length + ' prekl.', body, false, preview));
     });
 
+    if (db.modlitby.length) m.append(el('p', 'hint', 'Klikni na slovo, aby si ho označil ako dnes pomodlené.'));
     db.modlitby.forEach(k => {
-      const body = `<div class="chips">${k.slova.map(s => `<span class="chip">${esc(s)}</span>`).join('')}</div>`;
+      const body = `<div class="chips">${k.slova.map(s => `<span class="chip${done[k.nazov + '|' + s] ? ' on' : ''}" data-k="${esc(k.nazov + '|' + s)}">${esc(s)}</span>`).join('')}</div>`;
       m.append(acc(esc(k.nazov), k.slova.length, body));
     });
+    m.querySelectorAll('.chip').forEach(c => c.onclick = () => { c.classList.toggle('on'); if (c.classList.contains('on')) done[c.dataset.k] = 1; else delete done[c.dataset.k]; saveDone(); });
 
     ['V', 'R', 'M'].forEach(id => document.querySelectorAll(`#${id} details`).forEach((d, i) => { if (openState[id][i]) d.open = true; }));
   }
@@ -184,6 +210,7 @@
     document.querySelectorAll('.view').forEach(s => s.hidden = s.id !== t);
     document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === t));
     $('#title').textContent = names[t];
+    $('#eyebrow').textContent = new Date().toLocaleDateString('sk-SK', { weekday: 'long', day: 'numeric', month: 'long' });
     try { localStorage.setItem('modlitby-tab', t); } catch (e) {}
     scrollTo(0, 0);
   }
@@ -192,12 +219,20 @@
   try { start = localStorage.getItem('modlitby-tab') || 'V'; } catch (e) {}
   show(names[start] ? start : 'V');
 
+  // ===== veľkosť písma =====
+  const sizes = [16, 17, 19, 21];
+  let si = -1;
+  try { const s = +localStorage.getItem('modlitby-pismo'); si = sizes.indexOf(s); } catch (e) {}
+  const applySize = () => { if (si >= 0) document.documentElement.style.setProperty('--fs', sizes[si] + 'px'); };
+  applySize();
+  $('#sizeBtn').onclick = () => { si = (si + 1) % sizes.length; applySize(); try { localStorage.setItem('modlitby-pismo', sizes[si]); } catch (e) {} };
+
   // ===== deň / noc =====
   $('#themeBtn').onclick = () => {
     const root = document.documentElement;
     const t = root.dataset.theme === 'dark' ? 'light' : 'dark';
     root.dataset.theme = t;
-    $('meta[name=theme-color]').content = t === 'dark' ? '#101216' : '#f6f5f1';
+    $('meta[name=theme-color]').content = t === 'dark' ? '#0d1017' : '#f6f1e9';
     try { localStorage.setItem('modlitby-tema', t); } catch (e) {}
   };
 })();
