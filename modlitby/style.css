@@ -189,3 +189,4 @@ details.acc[open] .s-prev { display: none; }
 [data-edit] { -webkit-touch-callout: none; }
 details.acc > summary, .chip { -webkit-user-select: none; user-select: none; }
 .sheet-box { max-height: 88vh; overflow-y: auto; }
+.credit { color: var(--muted); font-size: .72rem; text-align: center; margin: 22px 10px 0; }

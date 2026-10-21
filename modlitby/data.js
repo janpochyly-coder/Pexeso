@@ -58,8 +58,8 @@ const ZDROJ_STRONG = "https://biblehub.com/interlinear/{slug}/{ch}-{v}.htm";
 
 // Knihy: [číslo, BibleHub slug, anglický názov (BibleGateway), kľúče bez diakritiky]
 const KNIHY = [
-  [1,'genesis','Genesis',['genezis','genesis']],[2,'exodus','Exodus',['exodus']],[3,'leviticus','Leviticus',['levitikus','leviticus']],
-  [4,'numbers','Numbers',['numeri','numbers']],[5,'deuteronomy','Deuteronomy',['deuteronomium']],
+  [0,'genesis','Genesis',['genezis','genesis']],[0,'exodus','Exodus',['exodus']],[0,'leviticus','Leviticus',['levitikus','leviticus']],
+  [0,'numbers','Numbers',['numeri','numbers']],[0,'deuteronomy','Deuteronomy',['deuteronomium']],
   [0,'joshua','Joshua',['jozue']],[0,'judges','Judges',['sudcov','sudcu','soudcu']],[0,'ruth','Ruth',['rut','ruth']],
   [1,'1_samuel','1 Samuel',['samuelova','samuel']],[2,'2_samuel','2 Samuel',['samuelova','samuel']],
   [1,'1_kings','1 Kings',['kralov','kralu']],[2,'2_kings','2 Kings',['kralov','kralu']],

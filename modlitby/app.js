@@ -50,6 +50,7 @@
     if (!m) return null;
     const num = +(m[1] || 0), name = norm(m[2]);
     if (name.length < 2) return null;
+    if (num >= 1 && num <= 5 && name.startsWith('mojzis')) return { idx: num - 1, slug: KNIHY[num - 1][1], en: KNIHY[num - 1][2], ch: m[3], v: m[4], v2: m[5] };
     const hit = KNIHY.find(k => (k[0] === num || (!num && !k[0])) && k[3].some(x => name === x || (name.length >= 3 && x.startsWith(name)))) ||
       KNIHY.find(k => k[0] === num && k[3].some(x => name === x));
     if (!hit) return null;
@@ -83,9 +84,25 @@
     const v1 = +p.v, v2 = +(p.v2 || p.v); if (v2 < v1 || v2 > ch.length) return null;
     return ch.slice(v1 - 1, v2).join(' ');
   }
-  // doplní prázdne preklady verša, ktoré máme v appke; vráti počet doplnených
+  // Strongove čísla: slovník + čísla slov v každom verši (STEPBible, Open Scriptures)
+  const sCache = {};
+  const getJson = u => (sCache[u] = sCache[u] || fetch(u).then(r => { if (!r.ok) throw 0; return r.json(); }).catch(() => { delete sCache[u]; return null; }));
+  async function strongFor(ref) {
+    const p = parseRef(ref); if (!p) return [];
+    const [book, lex] = await Promise.all([getJson('strong/b' + p.idx + '.json'), getJson('strong/lex.json')]);
+    const ch = book && book[+p.ch - 1]; if (!ch || !lex) return [];
+    const seen = new Set(), out = [];
+    for (let v = +p.v; v <= +(p.v2 || p.v); v++) (ch[v - 1] || []).forEach(n => {
+      const k = (n > 0 ? 'G' : 'H') + Math.abs(n), e = lex[k];
+      if (seen.has(k) || !e) return; seen.add(k);
+      out.push({ cislo: k, slovo: e[0], prepis: e[1], en: e[2].replace(/\.$/, ''), sk: '' });
+    });
+    return out.slice(0, 60);
+  }
+  // doplní prázdne preklady a Strong verša, ktoré máme v appke; vráti počet doplnených položiek
   async function autoFill(x) {
     let n = 0;
+    if (!(x.strong || []).some(s => s.cislo || s.slovo)) { const s = await strongFor(x.ref); if (s.length) { x.strong = s; n += s.length; } }
     for (const id of Object.keys(x.preklady)) {
       if (x.preklady[id].trim() || !hasLocal(id)) continue;
       const t = await lookup(id, x.ref); if (t) { x.preklady[id] = t; n++; }
@@ -121,7 +138,7 @@
     v.append(lead, el('div', 'section-label', 'Kategórie'));
     V.kategorie.forEach((k, i) => { const c = acc(esc(k.nazov), '', paras(k.text)); c.dataset.edit = 'v:' + i; v.append(c); });
 
-    if (!db.remy.length) r.append(el('div', 'empty', 'Zatiaľ žiadne verše. Pridaj ich v záložke Správa.'));
+    if (!db.remy.length) r.append(el('div', 'empty', 'Zatiaľ žiadne verše. Pridaj ich cez tlačidlo +.'));
     db.remy.forEach((x, xi) => {
       const keys = Object.keys(x.preklady).filter(k => x.preklady[k].trim());
       const preview = keys.length ? x.preklady[keys[0]] : '';
@@ -131,6 +148,7 @@
       if (!body) body = '<p class="empty">Zatiaľ bez textu.</p>';
       const rc = acc(`<span class="ref">${esc(x.ref)}</span>`, keys.length + ' prekl.', body, false, preview); rc.dataset.edit = 'r:' + xi; r.append(rc);
     });
+    if (db.remy.length) r.append(el('p', 'credit', 'Texty: KJV, Bible kralická (verejné). Strong: STEPBible.org (CC BY 4.0), Open Scriptures (CC BY-SA).'));
 
     if (db.modlitby.length) m.append(el('p', 'hint', 'Klikni na slovo, aby si ho označil ako dnes pomodlené.'));
     db.modlitby.forEach((k, ki) => {
@@ -259,6 +277,9 @@
   }
 
   renderPublic(); renderAdmin([]);
+  // existujúcim veršom bez Strong ho jednorazovo doplň
+  Promise.all(db.remy.filter(x => !(x.strong || []).some(s => s.cislo || s.slovo)).map(async x => { const s = await strongFor(x.ref); if (s.length) { x.strong = s; return 1; } return 0; }))
+    .then(r => { if (r.some(Boolean)) { save(); renderAdmin(); } });
 
   // ===== tlačidlo + (R, M) =====
   const sheet = $('#sheet'), form = $('#sheetForm');
