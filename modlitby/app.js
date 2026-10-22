@@ -6,14 +6,17 @@
   const KEY = 'modlitby-data';
   const MHINT = 'Klikni na položku, aby si ju označil ako dnes pomodlenú. Podržaním kategórie upravíš aj poradie jej položiek.';
 
-  // ===== dáta: predvolené (data.js) alebo upravené v Správe (localStorage) =====
+  // ===== dáta: predvolené (data.js) alebo upravené v Nastaveniach (localStorage) =====
   const defaults = () => JSON.parse(JSON.stringify({ vyznavanie: VYZNAVANIE, remy: REMY, modlitby: MODLITBY, reminders: [] }));
   let db;
   try { db = JSON.parse(localStorage.getItem(KEY)); } catch (e) {}
   if (!db || !db.vyznavanie || !db.remy || !db.modlitby) db = defaults();
   if (!Array.isArray(db.reminders)) db.reminders = [];
   let saveMsg = '';
-  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(db)); } catch (e) { alert('Uloženie zlyhalo (úložisko je plné alebo blokované).'); } renderPublic(); };
+  // koncept úprav v Nastaveniach: kým ho nepotvrdíš tlačidlom Uložiť, nezapíše sa na disk
+  let adminDraft = false, dirty = false, draftSnap = null, curTab = 'V';
+  const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(db)); } catch (e) { alert('Uloženie zlyhalo (úložisko je plné alebo blokované).'); } };
+  const save = () => { if (adminDraft) { dirty = true; updateBar(); } else persist(); renderPublic(); };
 
   function acc(title, sub, bodyHtml, open, preview) {
     const d = el('details', 'card acc');
@@ -140,7 +143,7 @@
     return { state: sub ? 'on' : Notification.permission === 'denied' ? 'denied' : 'off', reg, sub };
   }
   let syncT;
-  const pushSync = () => { clearTimeout(syncT); syncT = setTimeout(async () => { try { const i = await pushInfo(); if (i.sub) await post('sub', { subscription: i.sub.toJSON(), tz: Intl.DateTimeFormat().resolvedOptions().timeZone, reminders: db.reminders }); } catch (e) {} }, 700); };
+  const pushSync = () => { if (adminDraft) return; clearTimeout(syncT); syncT = setTimeout(async () => { try { const i = await pushInfo(); if (i.sub) await post('sub', { subscription: i.sub.toJSON(), tz: Intl.DateTimeFormat().resolvedOptions().timeZone, reminders: db.reminders }); } catch (e) {} }, 700); };
   async function pushEnable() {
     const i = await pushInfo(); if (!i.reg) throw new Error('Tento prehliadač push notifikácie nepodporuje.');
     if (await Notification.requestPermission() !== 'granted') throw new Error('Oznámenia nie sú povolené. Povoľ ich v nastaveniach prehliadača alebo telefónu.');
@@ -281,7 +284,7 @@
     ['V', 'R', 'M'].forEach(id => document.querySelectorAll(`#${id} details`).forEach((d, i) => { if ((id === 'M' ? mOpen : openState[id])[i]) d.open = true; }));
   }
 
-  // ===== Správa (backend) =====
+  // ===== Nastavenia (backend) =====
   const lines = s => s.split('\n').map(x => x.trim()).filter(Boolean);
   const blocks = s => s.split(/\n\s*\n/).map(x => x.trim()).filter(Boolean);
   const fld = (label, tag, val, rows) => `<label class="fld"><span>${label}</span><${tag}${rows ? ` rows="${rows}"` : ''}${tag === 'input' ? ` value="${esc(val)}"` : ''}>${tag === 'textarea' ? esc(val) : ''}${tag === 'textarea' ? '</textarea>' : '</label>'}${tag === 'textarea' ? '</label>' : ''}`;
@@ -289,7 +292,7 @@
   function bind(root, sel, fn) { root.querySelectorAll(sel).forEach((n, i) => n.addEventListener('input', () => { fn(n.value, i); save(); })); }
   function btn(root, sel, fn) { root.querySelectorAll(sel).forEach((n, i) => n.addEventListener('click', () => fn(i))); }
 
-  // ===== Správa: zoznam nastavení =====
+  // ===== Nastavenia: zoznam =====
   let adminPage = null;   // null = hlavný zoznam, inak id podstránky
   const ICONS = {
     book: 'M4 5.5A2.5 2.5 0 0 1 6.5 3H20v16H6.5A2.5 2.5 0 0 0 4 21.5zM4 21.5A2.5 2.5 0 0 1 6.5 19H20',
@@ -310,11 +313,27 @@
   const srow = (id, icon, color, title, sub, danger) => `<button type="button" class="srow${danger ? ' danger' : ''}" data-p="${id}">${ico(icon, color)}<span class="stxt"><b>${esc(title)}</b>${sub ? `<small>${esc(sub)}</small>` : ''}</span><span class="chev"></span></button>`;
   const PAGE_TITLE = { vintro: 'Vyznávanie – úvod', vcats: 'Vyznávanie – kategórie', remy: 'Rémy – verše', mcats: 'Modlitby – kategórie', mhint: 'Modlitby – text pod nadpisom', push: 'Pripomienky', prekl: 'Preklady v appke', backup: 'Záloha a obnova', about: 'O aplikácii' };
 
+  const EDITABLE = new Set(['vintro', 'vcats', 'remy', 'mhint', 'mcats', 'push']);
+  function updateBar() {
+    const b = $('#saveBar'); if (!b) return;
+    b.hidden = !(adminDraft && curTab === 'A');
+    b.classList.toggle('dirty', dirty); $('#sbInfo').textContent = dirty ? 'Neuložené zmeny' : 'Bez zmien';
+    document.body.classList.toggle('has-savebar', !b.hidden);
+  }
+  function toast(t) { const d = el('div', 'toast', esc(t)); document.body.append(d); setTimeout(() => d.classList.add('out'), 1400); setTimeout(() => d.remove(), 1900); }
+  function enterPage(p) { adminPage = p; adminDraft = EDITABLE.has(p); dirty = false; draftSnap = adminDraft ? JSON.stringify(db) : null; renderAdmin([]); updateBar(); scrollTo(0, 0); }
+  function commitDraft() { if (!adminDraft) return; adminDraft = false; dirty = false; draftSnap = null; persist(); pushSync(); updateBar(); }
+  function cancelDraft() { if (!adminDraft) return; db = JSON.parse(draftSnap); if (!Array.isArray(db.reminders)) db.reminders = []; adminDraft = false; dirty = false; draftSnap = null; renderPublic(); updateBar(); }
+  function leavePage() {            // späť / Zrušiť
+    if (adminDraft && dirty && !confirm('Zahodiť neuložené zmeny?')) return;
+    cancelDraft(); adminPage = null; renderAdmin([]); updateBar(); scrollTo(0, 0);
+  }
+  function saveAndLeave() { commitDraft(); adminPage = null; renderAdmin([]); scrollTo(0, 0); toast('Uložené'); }
   function renderAdmin(openIds) {
     const a = $('#A');
     const open = openIds || [...a.querySelectorAll('details')].map(d => d.open);
     a.replaceChildren();
-    const goto = p => { adminPage = p; renderAdmin([]); scrollTo(0, 0); };
+    const goto = p => p == null ? leavePage() : enterPage(p);
 
     // ---------- hlavný zoznam ----------
     if (adminPage == null) {
@@ -343,7 +362,7 @@
 
     // ---------- podstránka ----------
     a.onclick = null;
-    const head = el('div', 'spage-head', `<button type="button" class="back" aria-label="Späť"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg><span>Správa</span></button><h2>${esc(PAGE_TITLE[adminPage])}</h2>`);
+    const head = el('div', 'spage-head', `<button type="button" class="back" aria-label="Späť"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg><span>Nastavenia</span></button><h2>${esc(PAGE_TITLE[adminPage])}</h2>`);
     head.querySelector('.back').onclick = () => goto(null);
     a.append(head);
     const root = el('div', 'spage'); a.append(root);
@@ -620,8 +639,13 @@
   document.addEventListener('contextmenu', e => { if (e.target.closest('#V [data-edit], #R [data-edit], #M [data-edit]')) e.preventDefault(); });
 
   // ===== záložky =====
-  const names = { V: 'Vyznávanie', R: 'Rémy', M: 'Modlitby', A: 'Správa' };
+  const names = { V: 'Vyznávanie', R: 'Rémy', M: 'Modlitby', A: 'Nastavenia' };
   function show(t) {
+    if (curTab === 'A' && t !== 'A' && adminDraft) {   // odchod z Nastavení s rozpracovanými zmenami
+      if (dirty) { if (confirm('Máš neuložené zmeny. Uložiť ich?')) commitDraft(); else cancelDraft(); }
+      adminDraft = false; adminPage = null; renderAdmin([]);
+    }
+    curTab = t; updateBar();
     document.querySelectorAll('.view').forEach(s => s.hidden = s.id !== t);
     document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === t));
     $('#fab').hidden = !(t === 'R' || t === 'M');
@@ -631,6 +655,8 @@
     scrollTo(0, 0);
   }
   document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => show(b.dataset.tab));
+  $('#sbSave').onclick = saveAndLeave;
+  $('#sbCancel').onclick = leavePage;
   let start = 'V';
   try { start = localStorage.getItem('modlitby-tab') || 'V'; } catch (e) {}
   show(names[start] ? start : 'V');

@@ -47,7 +47,7 @@ const MODLITBY = [
   { nazov: "Príhovor", slova: ["rodina", "priatelia", "národ"] }
 ];
 
-// Zdroje pre tlačidlo „Nájsť“ v Správe. {q} = verš (napr. John+3:16), {slug}/{ch}/{v} pre BibleHub.
+// Zdroje pre tlačidlo „Nájsť“ v Nastaveniach. {q} = verš (napr. John+3:16), {slug}/{ch}/{v} pre BibleHub.
 // Preklad bez vlastného zdroja sa hľadá cez internetové vyhľadávanie.
 const ZDROJE = {
   KJV: "https://www.biblegateway.com/passage/?search={q}&version=KJV",

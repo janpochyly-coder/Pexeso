@@ -300,3 +300,24 @@ details.acc > summary, .chip { -webkit-user-select: none; user-select: none; }
 .about h3 { font: 600 1.05rem var(--serif); margin: 18px 0 8px; }
 .about ul { margin: 0; padding-left: 1.2em; } .about li { margin-bottom: 6px; font-size: .92rem; }
 .about p { margin: 0 0 10px; }
+
+/* lišta Uložiť / Zrušiť */
+.savebar {
+  position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(92px + env(safe-area-inset-bottom)); z-index: 11;
+  width: min(calc(100% - 24px), 460px); display: flex; align-items: center; gap: 8px; padding: 10px 10px 10px 16px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 18px 40px -14px rgba(0,0,0,.4);
+  animation: sbin .3s cubic-bezier(.2,.7,.2,1);
+}
+.savebar[hidden] { display: none; }
+.sb-info { flex: 1; display: flex; align-items: center; gap: 8px; font: 500 .85rem var(--sans); color: var(--muted); }
+.sb-info i { width: 8px; height: 8px; border-radius: 50%; background: var(--line); }
+.savebar.dirty .sb-info { color: var(--text); }
+.savebar.dirty .sb-info i { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+body.has-savebar main { padding-bottom: calc(190px + env(safe-area-inset-bottom)); }
+.toast {
+  position: fixed; left: 50%; bottom: calc(110px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 30;
+  background: var(--text); color: var(--bg); padding: 10px 18px; border-radius: 999px; font: 600 .88rem var(--sans);
+  box-shadow: 0 10px 30px -8px rgba(0,0,0,.4); animation: sbin .25s; transition: opacity .4s;
+}
+.toast.out { opacity: 0; }
+@keyframes sbin { from { opacity: 0; transform: translateX(-50%) translateY(24px); } }
