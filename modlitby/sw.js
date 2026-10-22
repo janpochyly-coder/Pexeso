@@ -1,6 +1,6 @@
 // Modlitby – service worker: offline režim a push notifikácie
-const CACHE = 'modlitby-v9';
-const SHELL = ['./', 'index.html', 'style.css', 'data.js', 'app.js', 'manifest.webmanifest', 'icons/icon-192.png'];
+const CACHE = 'modlitby-v10';
+const SHELL = ['./', 'index.html', 'style.css', 'data.js', 'app.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/splash.webp'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));

@@ -24,9 +24,25 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Modlitby">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<style id="splash-css">
+  #splash { position: fixed; inset: 0; z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 4vh; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    background: radial-gradient(ellipse at 50% 46%, #4a1a0c 0%, #1c0a07 45%, #070303 100%); transition: opacity .6s ease, visibility .6s; cursor: pointer; }
+  #splash.out { opacity: 0; visibility: hidden; }
+  #splash .sword { width: min(92vw, 62vh); height: min(92vw, 62vh); object-fit: contain; animation: swIn 1s cubic-bezier(.2,.7,.2,1) both, swGlow 2.4s ease-in-out 1s infinite alternate; }
+  @keyframes swIn { from { opacity: 0; transform: scale(.86) rotate(-3deg); } }
+  @keyframes swGlow { from { filter: drop-shadow(0 0 14px rgba(255,120,30,.35)); } to { filter: drop-shadow(0 0 34px rgba(255,160,50,.75)); } }
+  #splash .run { width: 100%; overflow: hidden; white-space: nowrap; -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent); mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent); }
+  #splash .run div { display: inline-flex; animation: runTxt 11s linear infinite; }
+  #splash .run span { padding-right: 3.2rem; font: italic 600 clamp(1.05rem, 4.6vw, 1.7rem)/1.4 "Fraunces", Georgia, serif; color: #ffd9a0; text-shadow: 0 0 14px rgba(255,140,40,.6); letter-spacing: .01em; }
+  @keyframes runTxt { to { transform: translateX(-50%); } }
+  @media (prefers-reduced-motion: reduce) { #splash .sword, #splash .run div { animation: none; } }
+</style>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<div id="splash" aria-label="Modlitby"><img class="sword" src="icons/splash.webp" alt="">
+  <div class="run" aria-hidden="true"><div><span>Božie Slovo je ako dvojsečný meč</span><span>Božie Slovo je ako dvojsečný meč</span><span>Božie Slovo je ako dvojsečný meč</span><span>Božie Slovo je ako dvojsečný meč</span><span>Božie Slovo je ako dvojsečný meč</span><span>Božie Slovo je ako dvojsečný meč</span></div></div></div>
 <header class="top">
   <div class="top-text">
     <div class="eyebrow" id="eyebrow"></div>
@@ -62,6 +78,17 @@
 
 <script src="data.js"></script>
 <script src="app.js"></script>
+<script>
+(function () {
+  var sp = document.getElementById('splash'), meta = document.querySelector('meta[name=theme-color]'), keep = meta && meta.content, t0 = Date.now(), done = false;
+  if (meta) meta.content = '#070303';                      // stavový riadok splynie s úvodnou obrazovkou
+  function hide() { if (done) return; done = true; sp.classList.add('out'); if (meta) meta.content = (document.documentElement.dataset.theme === 'dark') ? '#0d1017' : '#f6f1e9'; setTimeout(function () { sp.remove(); var c = document.getElementById('splash-css'); if (c) c.remove(); }, 700); }
+  function ready() { setTimeout(hide, Math.max(0, 2600 - (Date.now() - t0))); }
+  if (document.readyState === 'complete') ready(); else addEventListener('load', ready);
+  setTimeout(hide, 6000);                                  // poistka, keby sa niečo načítavalo príliš dlho
+  sp.addEventListener('click', hide);
+})();
+</script>
 <script>if ("serviceWorker" in navigator) addEventListener("load", function () { navigator.serviceWorker.register("sw.js").catch(function () {}); });</script>
 </body>
 </html>
