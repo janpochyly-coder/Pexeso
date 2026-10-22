@@ -190,3 +190,36 @@ details.acc[open] .s-prev { display: none; }
 details.acc > summary, .chip { -webkit-user-select: none; user-select: none; }
 .sheet-box { max-height: 88vh; overflow-y: auto; }
 .credit { color: var(--muted); font-size: .72rem; text-align: center; margin: 22px 10px 0; }
+
+/* Modlitby – zoznam slov, každé na celý riadok */
+.m-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 4px 12px; }
+.m-bar .hint { margin: 0; flex: 1; }
+.wlist { display: flex; flex-direction: column; }
+.wrow {
+  display: flex; align-items: center; gap: 14px; width: 100%; padding: 15px 4px; border-top: 1px solid var(--line);
+  font: 500 1.02rem/1.35 var(--sans); cursor: pointer; transition: color .2s;
+}
+.wlist .wrow:first-child { border-top: 0; }
+.wmark {
+  flex: none; width: 24px; height: 24px; border-radius: 50%; border: 1.8px solid var(--line); display: grid; place-items: center;
+  transition: all .2s cubic-bezier(.2,.7,.2,1);
+}
+.wrow.on .wmark { background: var(--accent); border-color: var(--accent); }
+.wrow.on .wmark::after { content: "✓"; color: var(--accent-ink); font-size: .8rem; font-weight: 700; }
+.wrow.on .wtxt { color: var(--muted); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--muted) 50%, transparent); }
+.wtxt { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.wadd {
+  width: 100%; margin-top: 8px; padding: 13px; border: 1.5px dashed var(--line); border-radius: 14px; background: none; color: var(--accent);
+  font: 600 .92rem var(--sans); cursor: pointer; transition: border-color .2s, background .2s;
+}
+.wadd:hover { border-color: var(--accent); background: var(--accent-soft); }
+.rcard { padding: 6px 18px 10px; }
+.rhead { display: flex; align-items: center; justify-content: space-between; padding: 12px 0 6px; font: 600 1.1rem var(--serif); color: var(--accent); }
+.rcard .wrow { cursor: default; }
+.mvb { display: flex; gap: 6px; }
+.mvb button {
+  width: 36px; height: 34px; border: 1px solid var(--line); border-radius: 10px; background: var(--chip); color: var(--text);
+  font-size: .8rem; cursor: pointer;
+}
+.mvb button:disabled { opacity: .3; cursor: default; }
+.mvb button:not(:disabled):active { transform: scale(.9); }

@@ -127,9 +127,12 @@
   }
 
   // ===== verejné záložky =====
+  let reorder = false, mOpen = [];
+  const move = (arr, i, d) => { const j = i + d; if (j < 0 || j >= arr.length) return false; [arr[i], arr[j]] = [arr[j], arr[i]]; return true; };
   function renderPublic() {
     const openState = {};
     ['V', 'R', 'M'].forEach(id => openState[id] = [...document.querySelectorAll(`#${id} details`)].map(d => d.open));
+    if (!reorder) mOpen = openState.M;
     const v = $('#V'), r = $('#R'), m = $('#M');
     v.replaceChildren(); r.replaceChildren(); m.replaceChildren();
 
@@ -150,14 +153,29 @@
     });
     if (db.remy.length) r.append(el('p', 'credit', 'Texty: KJV, Bible kralická (verejné). Strong: STEPBible.org (CC BY 4.0), Open Scriptures (CC BY-SA).'));
 
-    if (db.modlitby.length) m.append(el('p', 'hint', 'Klikni na slovo, aby si ho označil ako dnes pomodlené.'));
+    if (db.modlitby.length) {
+      const bar = el('div', 'm-bar', `<span class="hint">${reorder ? 'Presúvaj šípkami kategórie aj slová.' : 'Klikni na položku, aby si ju označil ako dnes pomodlenú. Podržaním ju upravíš.'}</span><button class="btn small${reorder ? ' primary' : ''}" id="reBtn">${reorder ? 'Hotovo' : '⇅ Zoradiť'}</button>`);
+      m.append(bar);
+      $('#reBtn', bar).onclick = () => { if (!reorder) mOpen = [...document.querySelectorAll('#M details')].map(d => d.open); reorder = !reorder; renderPublic(); };
+    }
+    const mv = (ki, si, d) => { const ok = si == null ? move(db.modlitby, ki, d) : move(db.modlitby[ki].slova, si, d); if (ok) { save(); renderAdmin(); } };
+    const arrows = (n, i, ki, si) => `<span class="mvb"><button data-mv="${ki}:${si == null ? '' : si}:-1"${i === 0 ? ' disabled' : ''} aria-label="Hore">▲</button><button data-mv="${ki}:${si == null ? '' : si}:1"${i === n - 1 ? ' disabled' : ''} aria-label="Dole">▼</button></span>`;
     db.modlitby.forEach((k, ki) => {
-      const body = `<div class="chips">${k.slova.map((s, si) => `<span class="chip${done[k.nazov + '|' + s] ? ' on' : ''}" data-k="${esc(k.nazov + '|' + s)}" data-edit="c:${ki}:${si}">${esc(s)}</span>`).join('')}</div>`;
+      if (reorder) {
+        const c = el('div', 'card rcard', `<div class="rhead"><b>${esc(k.nazov)}</b>${arrows(db.modlitby.length, ki, ki)}</div>` +
+          k.slova.map((s, si) => `<div class="wrow"><span class="wtxt">${esc(s)}</span>${arrows(k.slova.length, si, ki, si)}</div>`).join(''));
+        m.append(c);
+        return;
+      }
+      const rows = k.slova.map((s, si) => `<div class="wrow${done[k.nazov + '|' + s] ? ' on' : ''}" data-k="${esc(k.nazov + '|' + s)}" data-edit="c:${ki}:${si}"><span class="wmark"></span><span class="wtxt">${esc(s)}</span></div>`).join('');
+      const body = `<div class="wlist">${rows}</div><button class="wadd" data-add="${ki}">＋ Pridať</button>`;
       const mc = acc(esc(k.nazov), k.slova.length, body); mc.dataset.edit = 'm:' + ki; m.append(mc);
     });
-    m.querySelectorAll('.chip').forEach(c => c.onclick = () => { c.classList.toggle('on'); if (c.classList.contains('on')) done[c.dataset.k] = 1; else delete done[c.dataset.k]; saveDone(); });
+    m.querySelectorAll('[data-mv]').forEach(b => b.onclick = () => { const [ki, si, d] = b.dataset.mv.split(':'); mv(+ki, si === '' ? null : +si, +d); });
+    m.querySelectorAll('.wrow[data-k]').forEach(c => c.onclick = () => { c.classList.toggle('on'); if (c.classList.contains('on')) done[c.dataset.k] = 1; else delete done[c.dataset.k]; saveDone(); });
+    m.querySelectorAll('.wadd').forEach(b => b.onclick = () => quickAdd(+b.dataset.add));
 
-    ['V', 'R', 'M'].forEach(id => document.querySelectorAll(`#${id} details`).forEach((d, i) => { if (openState[id][i]) d.open = true; }));
+    ['V', 'R', 'M'].forEach(id => document.querySelectorAll(`#${id} details`).forEach((d, i) => { if ((id === 'M' ? mOpen : openState[id])[i]) d.open = true; }));
   }
 
   // ===== Správa (backend) =====
@@ -305,24 +323,12 @@
         });
       });
     } else if (tab === 'M') {
-      const opts = db.modlitby.map((k, i) => `<option value="${i}">${esc(k.nazov)}</option>`).join('');
-      openSheet(`<h3>Pridať do modlitieb</h3>
-        <label class="fld"><span>Kategória</span><select name="cat" id="shCat">${opts}<option value="new">➕ Nová kategória…</option></select></label>
-        <div id="shNew" hidden>${fld('Názov novej kategórie', 'input', '').replace('<input', '<input name="nazov"')}</div>
-        ${fld('Slová / spojenia (každé na nový riadok)', 'textarea', '', 4).replace('<textarea', '<textarea name="slova"')}`, fd => {
-        const slova = lines(fd.get('slova') || '');
-        let k;
-        if (fd.get('cat') === 'new') {
-          const nazov = (fd.get('nazov') || '').trim(); if (!nazov) return false;
-          k = { nazov, slova: [] }; db.modlitby.push(k);
-        } else k = db.modlitby[+fd.get('cat')];
-        k.slova.push(...slova);
+      openSheet(`<h3>Nová kategória</h3>${nm(fld('Názov kategórie', 'input', ''), 'nazov').replace('<input', '<input required')}${nm(fld('Slová / spojenia (každé na nový riadok, nepovinné)', 'textarea', '', 4), 'slova')}`, fd => {
+        const nazov = (fd.get('nazov') || '').trim(); if (!nazov) return false;
+        db.modlitby.push({ nazov, slova: lines(fd.get('slova') || '') });
+        mOpen[db.modlitby.length - 1] = true;
         save(); renderAdmin();
       });
-      const sel = $('#shCat'), nw = $('#shNew');
-      const sync = () => { nw.hidden = sel.value !== 'new'; };
-      if (!db.modlitby.length) sel.value = 'new';
-      sel.onchange = sync; sync();
     }
   };
 
@@ -335,12 +341,28 @@
     form.onsubmit = e => { e.preventDefault(); onSave(new FormData(form)); save(); renderAdmin(); closeSheet(); };
     sheet.hidden = false;
   }
+  const focusEnd = () => { const t = form.querySelector('textarea'); if (t) { t.focus(); t.setSelectionRange(t.value.length, t.value.length); } };
+  // rýchle pridávanie viacerých slov za sebou do kategórie
+  function quickAdd(ki) {
+    const k = db.modlitby[ki]; let added = [];
+    const show = () => {
+      form.innerHTML = `<h3>${esc(k.nazov)}</h3>${nm(fld('Nové slovo / spojenie', 'input', ''), 'w')}<p class="note">${added.length ? 'Pridané: ' + esc(added.join(', ')) : 'Pridaj jedno alebo viac, Enter pridá a ostane otvorené.'}</p><div class="row-actions"><button class="btn primary" type="submit">Pridať</button><button class="btn" type="button" id="shCancel">Hotovo</button></div>`;
+      $('#shCancel').onclick = closeSheet;
+      const i = form.querySelector('input'); i.focus();
+    };
+    form.onsubmit = e => {
+      e.preventDefault(); const w = (new FormData(form).get('w') || '').trim();
+      if (w) { k.slova.push(w); added.push(w); mOpen[ki] = true; save(); renderAdmin(); }
+      show();
+    };
+    sheet.hidden = false; show();
+  }
   const nm = (h, n) => h.replace(/<(input|textarea)/, `<$1 name="${n}"`);
   function editFor(kind) {
     const [t, i, j] = kind.split(':'), ix = +i;
     if (t === 'vi') { const u = db.vyznavanie.uvod; return openEdit(`<h3>Úprava úvodu</h3>${nm(fld('Nadpis', 'input', u.nadpis), 'n')}${nm(fld('Text (odseky oddeľ prázdnym riadkom)', 'textarea', u.text.join('\n\n'), 10), 't')}`, fd => { u.nadpis = fd.get('n'); u.text = blocks(fd.get('t')); }); }
     if (t === 'v') { const k = db.vyznavanie.kategorie[ix]; return openEdit(`<h3>Úprava kategórie</h3>${nm(fld('Názov', 'input', k.nazov), 'n')}${nm(fld('Text', 'textarea', k.text.join('\n\n'), 8), 't')}`, fd => { k.nazov = fd.get('n'); k.text = blocks(fd.get('t')); }, () => db.vyznavanie.kategorie.splice(ix, 1)); }
-    if (t === 'm') { const k = db.modlitby[ix]; return openEdit(`<h3>Úprava kategórie</h3>${nm(fld('Názov', 'input', k.nazov), 'n')}${nm(fld('Slová (každé na nový riadok)', 'textarea', k.slova.join('\n'), 7), 's')}`, fd => { k.nazov = fd.get('n'); k.slova = lines(fd.get('s')); }, () => db.modlitby.splice(ix, 1)); }
+    if (t === 'm') { const k = db.modlitby[ix]; return openEdit(`<h3>Úprava kategórie</h3>${nm(fld('Názov', 'input', k.nazov), 'n')}${nm(fld('Slová – nové pridaj na nový riadok', 'textarea', k.slova.join('\n') + '\n', 8), 's')}`, fd => { k.nazov = fd.get('n'); k.slova = lines(fd.get('s')); }, () => db.modlitby.splice(ix, 1)), focusEnd(); }
     if (t === 'c') { const k = db.modlitby[ix]; return openEdit(`<h3>Úprava slova</h3>${nm(fld('Slovo / spojenie', 'input', k.slova[+j]), 'w')}`, fd => { const w = fd.get('w').trim(); if (w) k.slova[+j] = w; else k.slova.splice(+j, 1); }, () => k.slova.splice(+j, 1)); }
     if (t === 'r') {
       const x = db.remy[ix], keys = Object.keys(x.preklady);
@@ -354,8 +376,8 @@
   }
   let lp = null, lpFired = false;
   document.addEventListener('pointerdown', e => {
-    const t = e.target.closest('#V [data-edit], #R [data-edit], #M [data-edit]'); if (!t) return;
-    const target = e.target.closest('.chip[data-edit]') || t;
+    const t = e.target.closest('#V [data-edit], #R [data-edit], #M [data-edit]'); if (!t || e.target.closest('.wadd')) return;
+    const target = t;
     const sx = e.clientX, sy = e.clientY; lpFired = false;
     lp = setTimeout(() => { lpFired = true; if (navigator.vibrate) navigator.vibrate(18); editFor(target.dataset.edit); }, 550);
     const cancel = ev => { if (ev.type === 'pointermove' && Math.hypot(ev.clientX - sx, ev.clientY - sy) < 8) return; clearTimeout(lp); document.removeEventListener('pointermove', cancel); document.removeEventListener('pointerup', cancel); document.removeEventListener('pointercancel', cancel); };
