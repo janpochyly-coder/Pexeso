@@ -11,6 +11,7 @@
     var t = localStorage.getItem('modlitby-tema');
     if (!t) t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
     document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name=theme-color]').content = t === 'dark' ? '#0d1017' : '#f6f1e9';
   } catch (e) { document.documentElement.dataset.theme = 'light'; }
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
