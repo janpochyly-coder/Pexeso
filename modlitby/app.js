@@ -126,6 +126,27 @@
     return out;
   }
 
+  // ===== zoraďovanie posúvaním (ťahaním za úchyt ⠿) =====
+  function makeSortable(container, itemSel, onDone) {
+    container.addEventListener('pointerdown', e => {
+      const grip = e.target.closest('.grip'); if (!grip) return;
+      const item = grip.closest(itemSel); if (!item || item.parentNode !== container) return;
+      e.preventDefault();
+      let startY = e.clientY; item.classList.add('drag'); grip.setPointerCapture(e.pointerId);
+      const siblings = () => [...container.children].filter(c => c.matches(itemSel));
+      const move = ev => {
+        item.style.transform = `translateY(${ev.clientY - startY}px)`;
+        const r = item.getBoundingClientRect(), mid = r.top + r.height / 2, list = siblings(), i = list.indexOf(item);
+        const next = list[i + 1], prev = list[i - 1];
+        const swap = (fn) => { item.style.transform = ''; const t0 = item.getBoundingClientRect().top; fn(); startY += item.getBoundingClientRect().top - t0; item.style.transform = `translateY(${ev.clientY - startY}px)`; };
+        if (next) { const nr = next.getBoundingClientRect(); if (mid > nr.top + nr.height / 2) return swap(() => container.insertBefore(next, item)); }
+        if (prev) { const pr = prev.getBoundingClientRect(); if (mid < pr.top + pr.height / 2) swap(() => container.insertBefore(item, prev)); }
+      };
+      const up = () => { grip.removeEventListener('pointermove', move); grip.removeEventListener('pointerup', up); grip.removeEventListener('pointercancel', up); item.classList.remove('drag'); item.style.transform = ''; onDone(siblings()); };
+      grip.addEventListener('pointermove', move); grip.addEventListener('pointerup', up); grip.addEventListener('pointercancel', up);
+    });
+  }
+
   // ===== verejné záložky =====
   let reorder = false, mOpen = [];
   const move = (arr, i, d) => { const j = i + d; if (j < 0 || j >= arr.length) return false; [arr[i], arr[j]] = [arr[j], arr[i]]; return true; };
@@ -154,24 +175,24 @@
     if (db.remy.length) r.append(el('p', 'credit', 'Texty: KJV, Bible kralická (verejné). Strong: STEPBible.org (CC BY 4.0), Open Scriptures (CC BY-SA).'));
 
     if (db.modlitby.length) {
-      const bar = el('div', 'm-bar', `<span class="hint">${reorder ? 'Presúvaj šípkami kategórie aj slová.' : 'Klikni na položku, aby si ju označil ako dnes pomodlenú. Podržaním ju upravíš.'}</span><button class="btn small${reorder ? ' primary' : ''}" id="reBtn">${reorder ? 'Hotovo' : '⇅ Zoradiť'}</button>`);
+      const bar = el('div', 'm-bar', `<span class="hint">${reorder ? 'Kategórie zoradíš posúvaním za ⠿ alebo šípkami.' : 'Klikni na položku, aby si ju označil ako dnes pomodlenú. Podržaním kategórie upravíš aj poradie jej položiek.'}</span><button class="btn small${reorder ? ' primary' : ''}" id="reBtn">${reorder ? 'Hotovo' : '⇅ Zoradiť'}</button>`);
       m.append(bar);
       $('#reBtn', bar).onclick = () => { if (!reorder) mOpen = [...document.querySelectorAll('#M details')].map(d => d.open); reorder = !reorder; renderPublic(); };
     }
-    const mv = (ki, si, d) => { const ok = si == null ? move(db.modlitby, ki, d) : move(db.modlitby[ki].slova, si, d); if (ok) { save(); renderAdmin(); } };
-    const arrows = (n, i, ki, si) => `<span class="mvb"><button data-mv="${ki}:${si == null ? '' : si}:-1"${i === 0 ? ' disabled' : ''} aria-label="Hore">▲</button><button data-mv="${ki}:${si == null ? '' : si}:1"${i === n - 1 ? ' disabled' : ''} aria-label="Dole">▼</button></span>`;
-    db.modlitby.forEach((k, ki) => {
-      if (reorder) {
-        const c = el('div', 'card rcard', `<div class="rhead"><b>${esc(k.nazov)}</b>${arrows(db.modlitby.length, ki, ki)}</div>` +
-          k.slova.map((s, si) => `<div class="wrow"><span class="wtxt">${esc(s)}</span>${arrows(k.slova.length, si, ki, si)}</div>`).join(''));
-        m.append(c);
-        return;
-      }
+    if (reorder) {
+      const list = el('div', 'rlist');
+      db.modlitby.forEach((k, ki) => {
+        list.append(el('div', 'card rcard', `<span class="grip" aria-label="Presunúť">⠿</span><b class="rname">${esc(k.nazov)}</b><span class="sub">${k.slova.length}</span><span class="mvb"><button data-mv="${ki}:-1"${ki === 0 ? ' disabled' : ''} aria-label="Hore">▲</button><button data-mv="${ki}:1"${ki === db.modlitby.length - 1 ? ' disabled' : ''} aria-label="Dole">▼</button></span>`));
+        list.lastChild.dataset.i = ki;
+      });
+      m.append(list);
+      makeSortable(list, '.rcard', items => { const old = db.modlitby.slice(); db.modlitby = items.map(x => old[+x.dataset.i]); save(); renderAdmin(); });
+      m.querySelectorAll('[data-mv]').forEach(b => b.onclick = () => { const [ki, d] = b.dataset.mv.split(':'); if (move(db.modlitby, +ki, +d)) { save(); renderAdmin(); } });
+    } else db.modlitby.forEach((k, ki) => {
       const rows = k.slova.map((s, si) => `<div class="wrow${done[k.nazov + '|' + s] ? ' on' : ''}" data-k="${esc(k.nazov + '|' + s)}" data-edit="c:${ki}:${si}"><span class="wmark"></span><span class="wtxt">${esc(s)}</span></div>`).join('');
       const body = `<div class="wlist">${rows}</div><button class="wadd" data-add="${ki}">＋ Pridať</button>`;
       const mc = acc(esc(k.nazov), k.slova.length, body); mc.dataset.edit = 'm:' + ki; m.append(mc);
     });
-    m.querySelectorAll('[data-mv]').forEach(b => b.onclick = () => { const [ki, si, d] = b.dataset.mv.split(':'); mv(+ki, si === '' ? null : +si, +d); });
     m.querySelectorAll('.wrow[data-k]').forEach(c => c.onclick = () => { c.classList.toggle('on'); if (c.classList.contains('on')) done[c.dataset.k] = 1; else delete done[c.dataset.k]; saveDone(); });
     m.querySelectorAll('.wadd').forEach(b => b.onclick = () => quickAdd(+b.dataset.add));
 
@@ -362,7 +383,20 @@
     const [t, i, j] = kind.split(':'), ix = +i;
     if (t === 'vi') { const u = db.vyznavanie.uvod; return openEdit(`<h3>Úprava úvodu</h3>${nm(fld('Nadpis', 'input', u.nadpis), 'n')}${nm(fld('Text (odseky oddeľ prázdnym riadkom)', 'textarea', u.text.join('\n\n'), 10), 't')}`, fd => { u.nadpis = fd.get('n'); u.text = blocks(fd.get('t')); }); }
     if (t === 'v') { const k = db.vyznavanie.kategorie[ix]; return openEdit(`<h3>Úprava kategórie</h3>${nm(fld('Názov', 'input', k.nazov), 'n')}${nm(fld('Text', 'textarea', k.text.join('\n\n'), 8), 't')}`, fd => { k.nazov = fd.get('n'); k.text = blocks(fd.get('t')); }, () => db.vyznavanie.kategorie.splice(ix, 1)); }
-    if (t === 'm') { const k = db.modlitby[ix]; return openEdit(`<h3>Úprava kategórie</h3>${nm(fld('Názov', 'input', k.nazov), 'n')}${nm(fld('Slová – nové pridaj na nový riadok', 'textarea', k.slova.join('\n') + '\n', 8), 's')}`, fd => { k.nazov = fd.get('n'); k.slova = lines(fd.get('s')); }, () => db.modlitby.splice(ix, 1)), focusEnd(); }
+    if (t === 'm') {
+      const k = db.modlitby[ix];
+      const row = w => `<div class="erow"><span class="grip" aria-label="Presunúť">⠿</span><input value="${esc(w)}"><button type="button" class="x" aria-label="Zmazať">×</button></div>`;
+      openEdit(`<h3>Úprava kategórie</h3>${nm(fld('Názov', 'input', k.nazov), 'n')}<div class="fld"><span>Položky – poradie zmeníš posúvaním za ⠿</span></div><div class="elist" id="eList">${k.slova.map(row).join('')}</div><div class="erow add"><input id="eNew" placeholder="Nová položka"><button type="button" class="x ok" id="eAdd" aria-label="Pridať">＋</button></div>`, fd => {
+        const vals = [...form.querySelectorAll('#eList input')].map(i => i.value.trim()), nw = $('#eNew').value.trim();
+        k.nazov = fd.get('n'); k.slova = vals.concat(nw ? [nw] : []).filter(Boolean);
+      }, () => db.modlitby.splice(ix, 1));
+      const list = $('#eList'), add = () => { const i = $('#eNew'), v = i.value.trim(); if (!v) return; list.insertAdjacentHTML('beforeend', row(v)); i.value = ''; i.focus(); list.lastElementChild.scrollIntoView({ block: 'nearest' }); };
+      $('#eAdd').onclick = add;
+      form.onkeydown = e => { if (e.key === 'Enter' && e.target.matches('input')) { e.preventDefault(); if (e.target.id === 'eNew') add(); } };
+      list.addEventListener('click', e => { const x = e.target.closest('.x'); if (x) x.closest('.erow').remove(); });
+      makeSortable(list, '.erow', () => {});
+      return;
+    }
     if (t === 'c') { const k = db.modlitby[ix]; return openEdit(`<h3>Úprava slova</h3>${nm(fld('Slovo / spojenie', 'input', k.slova[+j]), 'w')}`, fd => { const w = fd.get('w').trim(); if (w) k.slova[+j] = w; else k.slova.splice(+j, 1); }, () => k.slova.splice(+j, 1)); }
     if (t === 'r') {
       const x = db.remy[ix], keys = Object.keys(x.preklady);
