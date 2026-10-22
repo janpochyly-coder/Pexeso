@@ -4,6 +4,7 @@
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const paras = arr => arr.map(t => `<p>${esc(t)}</p>`).join('');
   const KEY = 'modlitby-data';
+  const MHINT = 'Klikni na položku, aby si ju označil ako dnes pomodlenú. Podržaním kategórie upravíš aj poradie jej položiek.';
 
   // ===== dáta: predvolené (data.js) alebo upravené v Správe (localStorage) =====
   const defaults = () => JSON.parse(JSON.stringify({ vyznavanie: VYZNAVANIE, remy: REMY, modlitby: MODLITBY }));
@@ -175,7 +176,7 @@
     if (db.remy.length) r.append(el('p', 'credit', 'Texty: KJV, Bible kralická (verejné). Strong: STEPBible.org (CC BY 4.0), Open Scriptures (CC BY-SA).'));
 
     if (db.modlitby.length) {
-      const bar = el('div', 'm-bar', `<span class="hint">${reorder ? 'Kategórie zoradíš posúvaním za ⠿ alebo šípkami.' : 'Klikni na položku, aby si ju označil ako dnes pomodlenú. Podržaním kategórie upravíš aj poradie jej položiek.'}</span><button class="btn small${reorder ? ' primary' : ''}" id="reBtn">${reorder ? 'Hotovo' : '⇅ Zoradiť'}</button>`);
+      const bar = el('div', 'm-bar', `<span class="hint">${esc(reorder ? 'Kategórie zoradíš posúvaním za ⠿ alebo šípkami.' : (db.mHint == null ? MHINT : db.mHint))}</span><button class="btn small${reorder ? ' primary' : ''}" id="reBtn">${reorder ? 'Hotovo' : '⇅ Zoradiť'}</button>`);
       m.append(bar);
       $('#reBtn', bar).onclick = () => { if (!reorder) mOpen = [...document.querySelectorAll('#M details')].map(d => d.open); reorder = !reorder; renderPublic(); };
     }
@@ -277,6 +278,10 @@
 
     // --- M ---
     a.append(el('div', 'section-label', 'Modlitby – kategórie'));
+    const hintSec = sec('Modlitby – text pod nadpisom', '', `${fld('Text (prázdny = nezobrazí sa)', 'textarea', db.mHint == null ? MHINT : db.mHint, 4)}<div class="row-actions"><button class="btn small" data-hint-reset>Obnoviť pôvodný text</button></div>`);
+    hintSec.querySelector('textarea').addEventListener('input', e => { db.mHint = e.target.value; save(); });
+    $('[data-hint-reset]', hintSec).onclick = () => { delete db.mHint; save(); renderAdmin(); };
+    a.append(hintSec);
     db.modlitby.forEach((k, i) => {
       const d = sec(esc(k.nazov), k.slova.length, fld('Názov kategórie', 'input', k.nazov) + fld('Slová / spojenia (každé na nový riadok)', 'textarea', k.slova.join('\n'), 7) + `<div class="row-actions"><button class="btn small danger" data-del>Zmazať kategóriu</button></div>`);
       bind(d, 'input', x => k.nazov = x);
