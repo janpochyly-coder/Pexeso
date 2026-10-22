@@ -15,7 +15,8 @@
   let saveMsg = '';
   // koncept úprav v Nastaveniach: kým ho nepotvrdíš tlačidlom Uložiť, nezapíše sa na disk
   let adminDraft = false, dirty = false, draftSnap = null, curTab = 'V';
-  const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(db)); } catch (e) { alert('Uloženie zlyhalo (úložisko je plné alebo blokované).'); } };
+  const persistRaw = () => { try { localStorage.setItem(KEY, JSON.stringify(db)); } catch (e) { alert('Uloženie zlyhalo (úložisko je plné alebo blokované).'); } };
+  const persist = () => { persistRaw(); markDirty(); };
   const save = () => { if (adminDraft) { dirty = true; updateBar(); } else persist(); renderPublic(); };
 
   function acc(title, sub, bodyHtml, open, preview) {
@@ -131,6 +132,61 @@
     if (out.filter(b => b.length).length < 27) throw new Error('málo kníh');
     return out;
   }
+
+  // ===== synchronizácia medzi zariadeniami (šifrovaná kódom) =====
+  const SK = 'modlitby-sync', ALPHA = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let syncState = null; try { syncState = JSON.parse(localStorage.getItem(SK)); } catch (e) {}
+  const saveSyncState = () => { try { if (syncState) localStorage.setItem(SK, JSON.stringify(syncState)); else localStorage.removeItem(SK); } catch (e) {} };
+  const newKey = () => Array.from(crypto.getRandomValues(new Uint8Array(24)), x => ALPHA[x % 32]).join('');
+  const fmtKey = k => k.match(/.{1,4}/g).join('-');
+  const normKey = s => s.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const u8b64 = u => { let s = ''; for (let i = 0; i < u.length; i += 8192) s += String.fromCharCode(...u.subarray(i, i + 8192)); return btoa(s); };
+  const b64u8 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+  let cryptoCache = null;
+  async function derive(key) {      // z kódu sa odvodí šifrovací kľúč aj identifikátor; server dostane len identifikátor
+    if (cryptoCache && cryptoCache.k === key) return cryptoCache;
+    const enc = new TextEncoder(), base = await crypto.subtle.importKey('raw', enc.encode(key), 'PBKDF2', false, ['deriveBits']);
+    const bits = new Uint8Array(await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: enc.encode('modlitby-sync-v1'), iterations: 200000 }, base, 512));
+    const aes = await crypto.subtle.importKey('raw', bits.slice(0, 32), 'AES-GCM', false, ['encrypt', 'decrypt']);
+    const id = [...new Uint8Array(await crypto.subtle.digest('SHA-256', bits.slice(32)))].map(x => x.toString(16).padStart(2, '0')).join('');
+    return (cryptoCache = { k: key, id, aes });
+  }
+  async function encryptDb(c, obj) { const iv = crypto.getRandomValues(new Uint8Array(12)); const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, c.aes, new TextEncoder().encode(JSON.stringify(obj)))); return JSON.stringify({ iv: u8b64(iv), ct: u8b64(ct) }); }
+  async function decryptDb(c, blob) { const { iv, ct } = JSON.parse(blob); return JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64u8(iv) }, c.aes, b64u8(ct)))); }
+  const syncApi = (act, body) => fetch(`${SYNC_API}?a=${act}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json());
+  const validDb = d => d && d.vyznavanie && Array.isArray(d.remy) && Array.isArray(d.modlitby);
+  function applyRemote(remote) {
+    db = remote; if (!Array.isArray(db.reminders)) db.reminders = [];
+    persistRaw(); renderPublic(); if (adminPage == null || curTab !== 'A') renderAdmin([]); pushSync();
+  }
+  let syncTimer, syncBusy = false;
+  function markDirty() { if (!syncState) return; syncState.dirty = true; saveSyncState(); clearTimeout(syncTimer); syncTimer = setTimeout(() => syncNow(), 2500); }
+  async function syncNow() {
+    if (!syncState || syncBusy || adminDraft) return { skipped: true };
+    syncBusy = true;
+    try {
+      const c = await derive(syncState.key);
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const r = await syncApi('get', { id: c.id });
+        if (r.exists && r.version > syncState.ver) {
+          if (syncState.dirty && !confirm('Obsah sa zmenil aj na inom zariadení.\n\nOK = použiť obsah z iného zariadenia (zmeny tu sa zahodia)\nZrušiť = nahradiť ním obsah z tohto zariadenia')) syncState.ver = r.version;   // ponechať lokálne, zapíše sa nižšie
+          else { applyRemote(await decryptDb(c, r.blob)); syncState.ver = r.version; syncState.dirty = false; }
+        }
+        if (!r.exists || syncState.dirty) {
+          const p = await syncApi('put', { id: c.id, blob: await encryptDb(c, db), base: r.exists ? syncState.ver : 0 });
+          if (p.conflict) { if (!r.exists) syncState.ver = 0; continue; }          // medzitým zapísal iný: skús znova
+          if (!p.ok) throw new Error(p.error || 'server');
+          syncState.ver = p.version; syncState.dirty = false;
+        }
+        syncState.last = Date.now(); syncState.err = null; saveSyncState(); return { ok: true };
+      }
+      throw new Error('konflikt');
+    } catch (e) { syncState.err = String(e.message || e); saveSyncState(); return { error: syncState.err }; }
+    finally { syncBusy = false; }
+  }
+  setTimeout(() => syncNow(), 1800);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') syncNow(); });
+  addEventListener('online', () => syncNow());
 
   // ===== push notifikácie (pripomienky) =====
   const b64 = s => { const r = atob((s + '='.repeat((4 - s.length % 4) % 4)).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from([...r].map(c => c.charCodeAt(0))); };
@@ -306,12 +362,13 @@
     info: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 16v-4M12 8h.01',
     download: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3',
     upload: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12',
-    reset: 'M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5'
+    reset: 'M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5',
+    cloud: 'M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z'
   };
   const ico = (n, c) => `<span class="sico" style="--c:${c}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="${ICONS[n]}"/></svg></span>`;
   const pl = (n, f) => n + ' ' + (n === 1 ? f[0] : n >= 2 && n <= 4 ? f[1] : f[2]);
   const srow = (id, icon, color, title, sub, danger) => `<button type="button" class="srow${danger ? ' danger' : ''}" data-p="${id}">${ico(icon, color)}<span class="stxt"><b>${esc(title)}</b>${sub ? `<small>${esc(sub)}</small>` : ''}</span><span class="chev"></span></button>`;
-  const PAGE_TITLE = { vintro: 'Vyznávanie – úvod', vcats: 'Vyznávanie – kategórie', remy: 'Rémy – verše', mcats: 'Modlitby – kategórie', mhint: 'Modlitby – text pod nadpisom', push: 'Pripomienky', prekl: 'Preklady v appke', backup: 'Záloha a obnova', about: 'O aplikácii' };
+  const PAGE_TITLE = { vintro: 'Vyznávanie – úvod', vcats: 'Vyznávanie – kategórie', remy: 'Rémy – verše', mcats: 'Modlitby – kategórie', mhint: 'Modlitby – text pod nadpisom', push: 'Pripomienky', prekl: 'Preklady v appke', backup: 'Záloha a obnova', about: 'O aplikácii', sync: 'Synchronizácia' };
 
   const EDITABLE = new Set(['vintro', 'vcats', 'remy', 'mhint', 'mcats', 'push']);
   function updateBar() {
@@ -353,6 +410,7 @@
       a.append(pushRow);
       a.append(el('div', 'sgroup-label', 'Údaje'));
       a.append(el('div', 'sgroup',
+        srow('sync', 'cloud', '#5b8def', 'Synchronizácia', syncState ? 'Zapnutá · rovnaký obsah na viacerých zariadeniach' : 'Vypnutá') +
         srow('backup', 'archive', '#8a8f9c', 'Záloha a obnova', 'Export, import, obnovenie predvolených') +
         srow('about', 'info', '#6f7fa3', 'O aplikácii', 'Zdroje a licencie')));
       a.append(el('p', 'note', 'Zmeny sa ukladajú automaticky v tomto zariadení.'));
@@ -505,7 +563,7 @@
           const url = URL.createObjectURL(new Blob([JSON.stringify(db, null, 2)], { type: 'application/json' }));
           const l = el('a'); l.href = url; l.download = 'modlitby-data.json'; l.click(); URL.revokeObjectURL(url);
         } else if (b.dataset.p === 'imp') fileInp.click();
-        else if (b.dataset.p === 'rst' && confirm('Zahodiť všetky úpravy a vrátiť predvolený obsah?')) { db = defaults(); try { localStorage.removeItem(KEY); } catch (e) {} renderPublic(); renderAdmin([]); }
+        else if (b.dataset.p === 'rst' && confirm('Zahodiť všetky úpravy a vrátiť predvolený obsah?' + (syncState ? '\n\nPri zapnutej synchronizácii sa predvolený obsah prenesie aj na ostatné zariadenia.' : ''))) { db = defaults(); persist(); renderPublic(); renderAdmin([]); }
       });
       fileInp.onchange = e => {
         const f = e.target.files[0]; if (!f) return;
@@ -516,6 +574,49 @@
           db = d; save(); renderAdmin([]);
         }).catch(() => alert('Neplatný súbor.'));
       };
+    }
+    if (adminPage === 'sync') {
+      const box = el('div', 'card pad'); root.append(box);
+      const fmtT = t => t ? new Date(t).toLocaleString('sk-SK', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+      const paint = (msg, showKey) => {
+        if (!syncState) {
+          box.innerHTML = `<p>Prepojí tvoje zariadenia, aby mali rovnaký obsah: vyznávanie, verše, modlitby aj pripomienky. Údaje sa šifrujú priamo v appke kódom, ktorý poznáš len ty, a server ich nevie prečítať.</p>
+            <div class="row-actions"><button class="btn primary" id="syNew">Vytvoriť synchronizačný kód</button></div>
+            <div class="section-label">Mám kód z iného zariadenia</div>
+            <label class="fld"><span>Kód</span><input id="syKey" placeholder="XXXX-XXXX-XXXX-XXXX-XXXX-XXXX" autocapitalize="characters" autocomplete="off" spellcheck="false"></label>
+            <div class="row-actions"><button class="btn" id="syJoin">Pripojiť toto zariadenie</button></div><p class="note" id="syMsg">${esc(msg || '')}</p>`;
+          $('#syNew', box).onclick = async e => {
+            e.target.disabled = true; syncState = { key: newKey(), ver: 0, dirty: true, last: 0 }; saveSyncState();
+            const r = await syncNow(); if (r.error) { alert('Synchronizácia sa nepodarila (' + r.error + '). Skontroluj internet a skús znova.'); syncState = null; saveSyncState(); }
+            paint('', !r.error);
+          };
+          $('#syJoin', box).onclick = async e => {
+            const key = normKey($('#syKey', box).value); if (key.length !== 24) return paint('Kód má mať 24 znakov (6 skupín po 4).');
+            e.target.disabled = true; $('#syMsg', box).textContent = 'Pripájam…';
+            try {
+              const c = await derive(key), r = await syncApi('get', { id: c.id });
+              if (!r.exists) return paint('Pre tento kód sa nenašli žiadne dáta. Skontroluj ho.');
+              let remote; try { remote = await decryptDb(c, r.blob); } catch (er) { return paint('Kód nie je správny.'); }
+              if (!validDb(remote)) return paint('Dáta na serveri majú neplatný formát.');
+              if (!confirm('Obsah v tomto zariadení sa nahradí obsahom zo synchronizácie. Pokračovať?')) return paint('');
+              syncState = { key, ver: r.version, dirty: false, last: Date.now() }; saveSyncState(); applyRemote(remote); paint('Pripojené. Obsah bol načítaný.');
+            } catch (er) { paint('Pripojenie zlyhalo. Skontroluj internet.'); }
+          };
+        } else {
+          box.innerHTML = `<p><b>Synchronizácia je zapnutá.</b><br><span class="note">Posledná synchronizácia: ${fmtT(syncState.last)}${syncState.dirty ? ' · čaká na odoslanie' : ''}${syncState.err ? ' · chyba: ' + esc(syncState.err) : ''}</span></p>
+            <div class="row-actions"><button class="btn primary" id="syNow">Synchronizovať teraz</button><button class="btn" id="syShow">${showKey ? 'Skryť kód' : 'Zobraziť kód'}</button></div>
+            ${showKey ? `<div class="synckey">${esc(fmtKey(syncState.key))}</div><div class="row-actions"><button class="btn small" id="syCopy">Kopírovať kód</button></div><p class="note">Tento kód zadaj na ďalšom zariadení. Zapíš si ho na bezpečné miesto: bez neho sa obsah z cloudu nedá obnoviť ani ho nevie obnoviť nikto iný.</p>` : ''}
+            <p class="note" id="syMsg">${esc(msg || '')}</p>
+            <div class="section-label">Rizikové</div>
+            <div class="row-actions"><button class="btn small danger" id="syOff">Odpojiť toto zariadenie</button><button class="btn small danger" id="syDel">Zmazať údaje zo servera</button></div>`;
+          $('#syNow', box).onclick = async e => { e.target.disabled = true; $('#syMsg', box).textContent = 'Synchronizujem…'; const r = await syncNow(); paint(r.error ? 'Nepodarilo sa: ' + r.error : r.skipped ? 'Teraz sa nedá (prebieha úprava alebo iná synchronizácia).' : 'Hotovo.', showKey); };
+          $('#syShow', box).onclick = () => paint('', !showKey);
+          const cp = $('#syCopy', box); if (cp) cp.onclick = () => { navigator.clipboard.writeText(fmtKey(syncState.key)).then(() => { cp.textContent = 'Skopírované'; }, () => alert('Kopírovanie sa nepodarilo, prepíš kód ručne.')); };
+          $('#syOff', box).onclick = () => { if (confirm('Toto zariadenie sa odpojí. Obsah v ňom ostane, ale prestane sa synchronizovať. Údaje na serveri ostanú.')) { syncState = null; saveSyncState(); paint('Odpojené.'); } };
+          $('#syDel', box).onclick = async () => { if (!confirm('Zmazať šifrované údaje zo servera a odpojiť toto zariadenie? Ostatné zariadenia budú mať svoju kópiu, ale prestanú sa synchronizovať.')) return; try { const c = await derive(syncState.key); await syncApi('del', { id: c.id }); syncState = null; saveSyncState(); paint('Údaje na serveri sú zmazané.'); } catch (er) { alert('Mazanie zlyhalo.'); } };
+        }
+      };
+      paint('', !!(syncState && syncState.last === 0));
     }
     if (adminPage === 'about') {
       root.append(el('div', 'card pad about', `

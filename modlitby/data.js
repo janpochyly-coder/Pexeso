@@ -88,3 +88,6 @@ const KNIHY = [
 
 // Push notifikácie: adresa funkcie na serveri (Supabase)
 const PUSH_API = "https://jimzptjhjogokmlwfpnt.supabase.co/functions/v1/modlitby-push";
+
+// Synchronizácia medzi zariadeniami (šifrované, Supabase)
+const SYNC_API = "https://jimzptjhjogokmlwfpnt.supabase.co/functions/v1/modlitby-sync";
