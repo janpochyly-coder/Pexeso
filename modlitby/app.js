@@ -27,6 +27,7 @@
     if (!s) return;
     e.preventDefault();
     const d = s.parentNode, body = d.querySelector('.body');
+    if (d.classList.contains('lead')) try { localStorage.setItem('modlitby-lead', d.open ? 'closed' : 'open'); } catch (e) {}
     if (matchMedia('(prefers-reduced-motion: reduce)').matches) { d.open = !d.open; return; }
     const opts = { duration: 320, easing: 'cubic-bezier(.2,.7,.2,1)' };
     if (d.open) {
@@ -214,7 +215,9 @@
     v.replaceChildren(); r.replaceChildren(); m.replaceChildren();
 
     const V = db.vyznavanie;
-    const lead = el('div', 'card lead', `<h2>${esc(V.uvod.nadpis)}</h2><div class="rich">${htmlOf(V.uvod)}</div>`); lead.dataset.edit = 'vi';
+    let leadOpen = true; try { leadOpen = localStorage.getItem('modlitby-lead') !== 'closed'; } catch (e) {}
+    if (openState.V.length) leadOpen = openState.V[0];
+    const lead = acc(esc(V.uvod.nadpis), '', `<div class="rich">${htmlOf(V.uvod)}</div>`, leadOpen); lead.classList.add('lead'); lead.dataset.edit = 'vi';
     v.append(lead, el('div', 'section-label', 'Kategórie'));
     V.kategorie.forEach((k, i) => { const c = acc(esc(k.nazov), '', `<div class="rich">${htmlOf(k)}</div>`); c.dataset.edit = 'v:' + i; v.append(c); });
 
