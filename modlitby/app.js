@@ -127,6 +127,61 @@
     return out;
   }
 
+  // ===== formátovaný text (editor + bezpečné čistenie HTML) =====
+  const OK_TAGS = new Set(['STRONG', 'EM', 'U', 'P', 'BR', 'H2', 'H3', 'UL', 'OL', 'LI', 'BLOCKQUOTE', 'HR']);
+  const TAG_MAP = { DIV: 'P', B: 'STRONG', I: 'EM', H1: 'H2', H4: 'H3', H5: 'H3', H6: 'H3' };
+  function clean(html) {
+    const t = document.createElement('template'); t.innerHTML = html || '';
+    const out = document.createElement('div');
+    (function walk(src, dst) {
+      src.childNodes.forEach(n => {
+        if (n.nodeType === 3) { dst.append(n.textContent); return; }
+        if (n.nodeType !== 1 || /^(SCRIPT|STYLE|IFRAME|OBJECT)$/.test(n.tagName)) return;
+        if (n.tagName === 'SPAN') {  // tučné / kurzíva z vloženého textu
+          let d = dst; const s = n.style;
+          if (s.fontWeight === 'bold' || +s.fontWeight >= 600) { const e = document.createElement('strong'); d.append(e); d = e; }
+          if (s.fontStyle === 'italic') { const e = document.createElement('em'); d.append(e); d = e; }
+          walk(n, d); return;
+        }
+        const tag = TAG_MAP[n.tagName] || n.tagName;
+        if (!OK_TAGS.has(tag) || (tag === 'P' && n.querySelector('ul,ol,blockquote,h2,h3,hr,p,div'))) { walk(n, dst); return; }
+        const e = document.createElement(tag); dst.append(e);
+        if (tag !== 'BR' && tag !== 'HR') walk(n, e);
+      });
+    })(t.content, out);
+    out.querySelectorAll('p').forEach(p => { if (!p.childNodes.length) p.remove(); });
+    return out.innerHTML;
+  }
+  const htmlOf = o => o.html != null ? clean(o.html) : (o.text || []).map(t => `<p>${esc(t)}</p>`).join('');
+  const plainOf = h => { const d = document.createElement('div'); d.innerHTML = h; return [...d.children].map(c => c.textContent.trim()).filter(Boolean); };
+  function richEditor(html, onChange) {
+    const wrap = el('div', 'rte');
+    const tools = [['bold', '<b>B</b>', 'Tučné'], ['italic', '<i>I</i>', 'Kurzíva'], ['underline', '<u>U</u>', 'Podčiarknuté'], '|',
+      ['h2', 'Nadpis', 'Veľký nadpis'], ['h3', 'Podnadpis', 'Malý nadpis'], ['p', '¶', 'Bežný odsek'], '|',
+      ['insertUnorderedList', '• Zoznam', 'Odrážky'], ['insertOrderedList', '1. Zoznam', 'Číslovanie'], ['quote', '❝', 'Citát'], ['insertHorizontalRule', '―', 'Oddeľovacia čiara'], '|',
+      ['undo', '↶', 'Späť'], ['redo', '↷', 'Znova'], ['removeFormat', 'T×', 'Zrušiť formátovanie']];
+    const bar = el('div', 'rte-bar', tools.map(t => t === '|' ? '<span class="sep"></span>' : `<button type="button" data-c="${t[0]}" title="${t[2]}" aria-label="${t[2]}">${t[1]}</button>`).join(''));
+    const area = el('div', 'rte-area', clean(htmlOf({ html })) || '<p><br></p>'); area.contentEditable = 'true'; area.spellcheck = true;
+    wrap.append(bar, area);
+    const changed = () => { if (onChange) onChange(clean(area.innerHTML)); };
+    const run = c => {
+      area.focus();
+      try { document.execCommand('styleWithCSS', false, false); document.execCommand('defaultParagraphSeparator', false, 'p'); } catch (e) {}
+      if (c === 'h2' || c === 'h3' || c === 'quote') {
+        const tag = c === 'quote' ? 'blockquote' : c, cur = (document.queryCommandValue('formatBlock') || '').toLowerCase();
+        document.execCommand('formatBlock', false, '<' + (cur === tag ? 'p' : tag) + '>');
+      } else if (c === 'p') document.execCommand('formatBlock', false, '<p>');
+      else document.execCommand(c, false, null);
+      changed();
+    };
+    bar.addEventListener('mousedown', e => e.preventDefault());   // nezruš výber textu
+    bar.addEventListener('click', e => { const b = e.target.closest('button'); if (b) run(b.dataset.c); });
+    area.addEventListener('input', changed);
+    area.addEventListener('paste', e => { e.preventDefault(); const h = e.clipboardData.getData('text/html'), t = e.clipboardData.getData('text/plain'); document.execCommand('insertHTML', false, h ? clean(h) : esc(t).replace(/\n/g, '<br>')); changed(); });
+    area.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'b') { e.preventDefault(); run('bold'); } });
+    return { el: wrap, getHtml: () => clean(area.innerHTML) };
+  }
+
   // ===== zoraďovanie posúvaním (ťahaním za úchyt ⠿) =====
   function makeSortable(container, itemSel, onDone) {
     container.addEventListener('pointerdown', e => {
@@ -159,9 +214,9 @@
     v.replaceChildren(); r.replaceChildren(); m.replaceChildren();
 
     const V = db.vyznavanie;
-    const lead = el('div', 'card lead', `<h2>${esc(V.uvod.nadpis)}</h2>${paras(V.uvod.text)}`); lead.dataset.edit = 'vi';
+    const lead = el('div', 'card lead', `<h2>${esc(V.uvod.nadpis)}</h2><div class="rich">${htmlOf(V.uvod)}</div>`); lead.dataset.edit = 'vi';
     v.append(lead, el('div', 'section-label', 'Kategórie'));
-    V.kategorie.forEach((k, i) => { const c = acc(esc(k.nazov), '', paras(k.text)); c.dataset.edit = 'v:' + i; v.append(c); });
+    V.kategorie.forEach((k, i) => { const c = acc(esc(k.nazov), '', `<div class="rich">${htmlOf(k)}</div>`); c.dataset.edit = 'v:' + i; v.append(c); });
 
     if (!db.remy.length) r.append(el('div', 'empty', 'Zatiaľ žiadne verše. Pridaj ich cez tlačidlo +.'));
     db.remy.forEach((x, xi) => {
@@ -225,14 +280,14 @@
 
     // --- V ---
     const V = db.vyznavanie;
-    const vIntro = sec('Vyznávanie – úvodný text', '', fld('Nadpis', 'input', V.uvod.nadpis) + fld('Text (odseky oddeľ prázdnym riadkom)', 'textarea', V.uvod.text.join('\n\n'), 9));
+    const vIntro = sec('Vyznávanie – úvodný text', '', fld('Nadpis', 'input', V.uvod.nadpis) + '<div class="fld"><span>Text</span><div class="rte-host"></div></div>');
     bind(vIntro, 'input', x => V.uvod.nadpis = x);
-    bind(vIntro, 'textarea', x => V.uvod.text = blocks(x));
+    vIntro.querySelector('.rte-host').append(richEditor(htmlOf(V.uvod), h => { V.uvod.html = h; V.uvod.text = plainOf(h); save(); }).el);
     a.append(vIntro);
 
-    const vCats = sec('Vyznávanie – kategórie', V.kategorie.length, V.kategorie.map(k => `<div class="tr-edit">${fld('Názov', 'input', k.nazov)}${fld('Text', 'textarea', k.text.join('\n\n'), 5)}<div class="row-actions"><button class="btn small danger" data-del>Zmazať</button></div></div>`).join('') + `<button class="btn" id="addV">+ Pridať kategóriu</button>`);
+    const vCats = sec('Vyznávanie – kategórie', V.kategorie.length, V.kategorie.map(k => `<div class="tr-edit">${fld('Názov', 'input', k.nazov)}<div class="fld"><span>Text</span><div class="rte-host"></div></div><div class="row-actions"><button class="btn small danger" data-del>Zmazať</button></div></div>`).join('') + `<button class="btn" id="addV">+ Pridať kategóriu</button>`);
     bind(vCats, 'input', (x, i) => V.kategorie[i].nazov = x);
-    bind(vCats, 'textarea', (x, i) => V.kategorie[i].text = blocks(x));
+    vCats.querySelectorAll('.rte-host').forEach((h, i) => h.append(richEditor(htmlOf(V.kategorie[i]), x => { V.kategorie[i].html = x; V.kategorie[i].text = plainOf(x); save(); }).el));
     btn(vCats, '[data-del]', i => { if (confirm('Zmazať kategóriu?')) { V.kategorie.splice(i, 1); save(); renderAdmin(); } });
     btn(vCats, '#addV', () => { V.kategorie.push({ nazov: 'Nová kategória', text: [''] }); save(); renderAdmin(); });
     a.append(vCats);
@@ -330,6 +385,7 @@
   const closeSheet = () => { sheet.hidden = true; };
   sheet.querySelector('.sheet-bg').onclick = closeSheet;
   function openSheet(html, onSubmit) {
+    form.onkeydown = null;
     form.innerHTML = html + `<div class="row-actions"><button class="btn primary" type="submit">Pridať</button><button class="btn" type="button" id="shCancel">Zrušiť</button></div>`;
     $('#shCancel').onclick = closeSheet;
     form.onsubmit = e => { e.preventDefault(); if (onSubmit(new FormData(form)) !== false) closeSheet(); };
@@ -361,6 +417,7 @@
   // ===== úprava podržaním =====
   const sheetBtns = (del) => `<div class="row-actions"><button class="btn primary" type="submit">Uložiť</button><button class="btn" type="button" id="shCancel">Zrušiť</button>${del ? '<button class="btn danger" type="button" id="shDel">Zmazať</button>' : ''}</div>`;
   function openEdit(html, onSave, onDelete) {
+    form.onkeydown = null;
     form.innerHTML = html + sheetBtns(!!onDelete);
     $('#shCancel').onclick = closeSheet;
     if (onDelete) $('#shDel').onclick = () => { if (confirm('Naozaj zmazať?')) { onDelete(); save(); renderAdmin(); closeSheet(); } };
@@ -386,8 +443,8 @@
   const nm = (h, n) => h.replace(/<(input|textarea)/, `<$1 name="${n}"`);
   function editFor(kind) {
     const [t, i, j] = kind.split(':'), ix = +i;
-    if (t === 'vi') { const u = db.vyznavanie.uvod; return openEdit(`<h3>Úprava úvodu</h3>${nm(fld('Nadpis', 'input', u.nadpis), 'n')}${nm(fld('Text (odseky oddeľ prázdnym riadkom)', 'textarea', u.text.join('\n\n'), 10), 't')}`, fd => { u.nadpis = fd.get('n'); u.text = blocks(fd.get('t')); }); }
-    if (t === 'v') { const k = db.vyznavanie.kategorie[ix]; return openEdit(`<h3>Úprava kategórie</h3>${nm(fld('Názov', 'input', k.nazov), 'n')}${nm(fld('Text', 'textarea', k.text.join('\n\n'), 8), 't')}`, fd => { k.nazov = fd.get('n'); k.text = blocks(fd.get('t')); }, () => db.vyznavanie.kategorie.splice(ix, 1)); }
+    if (t === 'vi') { const u = db.vyznavanie.uvod; let ed; openEdit(`<h3>Úprava úvodu</h3>${nm(fld('Nadpis', 'input', u.nadpis), 'n')}<div class="fld"><span>Text</span><div class="rte-host"></div></div>`, fd => { u.nadpis = fd.get('n'); u.html = ed.getHtml(); u.text = plainOf(u.html); }); ed = richEditor(htmlOf(u)); form.querySelector('.rte-host').append(ed.el); return; }
+    if (t === 'v') { const k = db.vyznavanie.kategorie[ix]; let ed; openEdit(`<h3>Úprava kategórie</h3>${nm(fld('Názov', 'input', k.nazov), 'n')}<div class="fld"><span>Text</span><div class="rte-host"></div></div>`, fd => { k.nazov = fd.get('n'); k.html = ed.getHtml(); k.text = plainOf(k.html); }, () => db.vyznavanie.kategorie.splice(ix, 1)); ed = richEditor(htmlOf(k)); form.querySelector('.rte-host').append(ed.el); return; }
     if (t === 'm') {
       const k = db.modlitby[ix];
       const row = w => `<div class="erow"><span class="grip" aria-label="Presunúť">⠿</span><input value="${esc(w)}"><button type="button" class="x" aria-label="Zmazať">×</button></div>`;
