@@ -289,37 +289,86 @@
   function bind(root, sel, fn) { root.querySelectorAll(sel).forEach((n, i) => n.addEventListener('input', () => { fn(n.value, i); save(); })); }
   function btn(root, sel, fn) { root.querySelectorAll(sel).forEach((n, i) => n.addEventListener('click', () => fn(i))); }
 
+  // ===== Správa: zoznam nastavení =====
+  let adminPage = null;   // null = hlavný zoznam, inak id podstránky
+  const ICONS = {
+    book: 'M4 5.5A2.5 2.5 0 0 1 6.5 3H20v16H6.5A2.5 2.5 0 0 0 4 21.5zM4 21.5A2.5 2.5 0 0 1 6.5 19H20',
+    layers: 'M12 2 2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5',
+    quote: 'M7 7h4v4c0 3-1.5 5-4 6M15 7h4v4c0 3-1.5 5-4 6',
+    heart: 'M12 21s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.6-7 10-7 10z',
+    type: 'M4 7V4h16v3M9 20h6M12 4v16',
+    bell: 'M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0',
+    globe: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z',
+    archive: 'M21 8v13H3V8M1 3h22v5H1zM10 12h4',
+    info: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 16v-4M12 8h.01',
+    download: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3',
+    upload: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12',
+    reset: 'M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5'
+  };
+  const ico = (n, c) => `<span class="sico" style="--c:${c}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="${ICONS[n]}"/></svg></span>`;
+  const pl = (n, f) => n + ' ' + (n === 1 ? f[0] : n >= 2 && n <= 4 ? f[1] : f[2]);
+  const srow = (id, icon, color, title, sub, danger) => `<button type="button" class="srow${danger ? ' danger' : ''}" data-p="${id}">${ico(icon, color)}<span class="stxt"><b>${esc(title)}</b>${sub ? `<small>${esc(sub)}</small>` : ''}</span><span class="chev"></span></button>`;
+  const PAGE_TITLE = { vintro: 'Vyznávanie – úvod', vcats: 'Vyznávanie – kategórie', remy: 'Rémy – verše', mcats: 'Modlitby – kategórie', mhint: 'Modlitby – text pod nadpisom', push: 'Pripomienky', prekl: 'Preklady v appke', backup: 'Záloha a obnova', about: 'O aplikácii' };
+
   function renderAdmin(openIds) {
     const a = $('#A');
     const open = openIds || [...a.querySelectorAll('details')].map(d => d.open);
     a.replaceChildren();
+    const goto = p => { adminPage = p; renderAdmin([]); scrollTo(0, 0); };
 
-    const bar = el('div', 'adm-bar', `
-      <button class="btn primary" id="exp">Exportovať JSON</button>
-      <button class="btn" id="imp">Importovať JSON</button>
-      <button class="btn danger" id="rst">Obnoviť predvolené</button>
-      <input type="file" id="file" accept="application/json" hidden>`);
-    a.append(bar, el('p', 'note', 'Zmeny sa ukladajú automaticky v tomto zariadení. Export ti dá zálohu, ktorú môžeš preniesť do iného zariadenia cez Import.'));
+    // ---------- hlavný zoznam ----------
+    if (adminPage == null) {
+      const V = db.vyznavanie;
+      const hint = db.mHint == null ? MHINT : db.mHint;
+      a.append(el('div', 'sgroup-label', 'Obsah'));
+      a.append(el('div', 'sgroup',
+        srow('vintro', 'book', '#c28a3a', 'Vyznávanie – úvod', V.uvod.nadpis) +
+        srow('vcats', 'layers', '#d98a4a', 'Vyznávanie – kategórie', pl(V.kategorie.length, ['kategória', 'kategórie', 'kategórií'])) +
+        srow('remy', 'quote', '#5b8def', 'Rémy – verše', pl(db.remy.length, ['verš', 'verše', 'veršov'])) +
+        srow('mcats', 'heart', '#d0607e', 'Modlitby – kategórie', pl(db.modlitby.length, ['kategória', 'kategórie', 'kategórií'])) +
+        srow('mhint', 'type', '#8b6fe0', 'Modlitby – text pod nadpisom', hint ? hint.slice(0, 40) + (hint.length > 40 ? '…' : '') : 'Skrytý')));
+      a.append(el('div', 'sgroup-label', 'Aplikácia'));
+      const pushRow = el('div', 'sgroup',
+        srow('push', 'bell', '#4fae7b', 'Pripomienky', 'Notifikácie · ' + pl(db.reminders.length, ['pripomienka', 'pripomienky', 'pripomienok'])) +
+        srow('prekl', 'globe', '#3bb0b5', 'Preklady v appke', 'KJV, Kralická' + (imported.size ? ' + ' + imported.size + ' importované' : '')));
+      a.append(pushRow);
+      a.append(el('div', 'sgroup-label', 'Údaje'));
+      a.append(el('div', 'sgroup',
+        srow('backup', 'archive', '#8a8f9c', 'Záloha a obnova', 'Export, import, obnovenie predvolených') +
+        srow('about', 'info', '#6f7fa3', 'O aplikácii', 'Zdroje a licencie')));
+      a.append(el('p', 'note', 'Zmeny sa ukladajú automaticky v tomto zariadení.'));
+      a.onclick = e => { const b = e.target.closest('[data-p]'); if (b) goto(b.dataset.p); };
+      return;
+    }
 
+    // ---------- podstránka ----------
+    a.onclick = null;
+    const head = el('div', 'spage-head', `<button type="button" class="back" aria-label="Späť"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg><span>Správa</span></button><h2>${esc(PAGE_TITLE[adminPage])}</h2>`);
+    head.querySelector('.back').onclick = () => goto(null);
+    a.append(head);
+    const root = el('div', 'spage'); a.append(root);
     let n = 0;
     const sec = (title, sub, html) => acc(title, sub, html, open[n++]);
 
-    // --- V ---
+    if (adminPage === 'vintro') {
     const V = db.vyznavanie;
-    const vIntro = sec('Vyznávanie – úvodný text', '', fld('Nadpis', 'input', V.uvod.nadpis) + '<div class="fld"><span>Text</span><div class="rte-host"></div></div>');
+    const vIntro = el('div', 'card pad', fld('Nadpis', 'input', V.uvod.nadpis) + '<div class="fld"><span>Text</span><div class="rte-host"></div></div>');
     bind(vIntro, 'input', x => V.uvod.nadpis = x);
     vIntro.querySelector('.rte-host').append(richEditor(htmlOf(V.uvod), h => { V.uvod.html = h; V.uvod.text = plainOf(h); save(); }).el);
-    a.append(vIntro);
+    root.append(vIntro);
 
-    const vCats = sec('Vyznávanie – kategórie', V.kategorie.length, V.kategorie.map(k => `<div class="tr-edit">${fld('Názov', 'input', k.nazov)}<div class="fld"><span>Text</span><div class="rte-host"></div></div><div class="row-actions"><button class="btn small danger" data-del>Zmazať</button></div></div>`).join('') + `<button class="btn" id="addV">+ Pridať kategóriu</button>`);
+    }
+    if (adminPage === 'vcats') {
+    const V = db.vyznavanie;
+    const vCats = el('div', 'card pad', V.kategorie.map(k => `<div class="tr-edit">${fld('Názov', 'input', k.nazov)}<div class="fld"><span>Text</span><div class="rte-host"></div></div><div class="row-actions"><button class="btn small danger" data-del>Zmazať</button></div></div>`).join('') + `<button class="btn" id="addV">+ Pridať kategóriu</button>`);
     bind(vCats, 'input', (x, i) => V.kategorie[i].nazov = x);
     vCats.querySelectorAll('.rte-host').forEach((h, i) => h.append(richEditor(htmlOf(V.kategorie[i]), x => { V.kategorie[i].html = x; V.kategorie[i].text = plainOf(x); save(); }).el));
     btn(vCats, '[data-del]', i => { if (confirm('Zmazať kategóriu?')) { V.kategorie.splice(i, 1); save(); renderAdmin(); } });
     btn(vCats, '#addV', () => { V.kategorie.push({ nazov: 'Nová kategória', text: [''] }); save(); renderAdmin(); });
-    a.append(vCats);
+    root.append(vCats);
 
-    // --- R ---
-    a.append(el('div', 'section-label', 'Rémy – verše'));
+    }
+    if (adminPage === 'remy') {
     db.remy.forEach((x, vi) => {
       const keys = Object.keys(x.preklady);
       const d = sec(`<span class="ref">${esc(x.ref)}</span>`, keys.length + ' prekl.',
@@ -351,32 +400,35 @@
       btn(d, '[data-addtr]', async () => { let k = d.querySelector('[data-pick]').value || 'Nový', c = 1; while (k in x.preklady) k = 'Nový ' + (++c); x.preklady[k] = ''; await autoFill(x); save(); renderAdmin(); });
       btn(d, '[data-auto]', async () => { const n = await autoFill(x); if (!n) alert('Nič sa nedoplnilo. Skontroluj odkaz (napr. „Ján 3,16“) a či je preklad v appke (KJV, Kralická alebo importovaný).'); save(); renderAdmin(); });
       btn(d, '[data-delv]', () => { if (confirm('Zmazať verš ' + x.ref + '?')) { db.remy.splice(vi, 1); save(); renderAdmin(); } });
-      a.append(d);
+      root.append(d);
     });
     const addR = el('button', 'btn', '+ Pridať verš'); addR.style.marginBottom = '14px';
     addR.onclick = () => { db.remy.push(newVerse('Nový verš')); save(); renderAdmin(); };
-    a.append(addR);
+    root.append(addR);
 
-    // --- M ---
-    a.append(el('div', 'section-label', 'Modlitby – kategórie'));
-    const hintSec = sec('Modlitby – text pod nadpisom', '', `${fld('Text (prázdny = nezobrazí sa)', 'textarea', db.mHint == null ? MHINT : db.mHint, 4)}<div class="row-actions"><button class="btn small" data-hint-reset>Obnoviť pôvodný text</button></div>`);
+    }
+    if (adminPage === 'mhint') {
+    const hintSec = el('div', 'card pad', `${fld('Text (prázdny = nezobrazí sa)', 'textarea', db.mHint == null ? MHINT : db.mHint, 4)}<div class="row-actions"><button class="btn small" data-hint-reset>Obnoviť pôvodný text</button></div>`);
     hintSec.querySelector('textarea').addEventListener('input', e => { db.mHint = e.target.value; save(); });
     $('[data-hint-reset]', hintSec).onclick = () => { delete db.mHint; save(); renderAdmin(); };
-    a.append(hintSec);
+    root.append(hintSec);
+    }
+    if (adminPage === 'mcats') {
     db.modlitby.forEach((k, i) => {
       const d = sec(esc(k.nazov), k.slova.length, fld('Názov kategórie', 'input', k.nazov) + fld('Slová / spojenia (každé na nový riadok)', 'textarea', k.slova.join('\n'), 7) + `<div class="row-actions"><button class="btn small danger" data-del>Zmazať kategóriu</button></div>`);
       bind(d, 'input', x => k.nazov = x);
       bind(d, 'textarea', x => k.slova = lines(x));
       btn(d, '[data-del]', () => { if (confirm('Zmazať kategóriu ' + k.nazov + '?')) { db.modlitby.splice(i, 1); save(); renderAdmin(); } });
-      a.append(d);
+      root.append(d);
     });
     const addM = el('button', 'btn', '+ Pridať kategóriu');
     addM.onclick = () => { db.modlitby.push({ nazov: 'Nová kategória', slova: [] }); save(); renderAdmin(); };
-    a.append(addM);
-    a.append(el('div', 'section-label', 'Preklady v appke'));
+    root.append(addM);
+    }
+    if (adminPage === 'prekl') {
     const stat = PREKLADY.map(p => `<div class="tr"><b>${esc(p.id)}</b>${esc(p.nazov)} – ${p.lokalny ? 'vstavaný' : imported.has(p.id) ? 'importovaný' : 'zatiaľ nie je (vkladáš ručne alebo importuj)'}</div>`).join('');
-    const imp = sec('Importovať preklad', '', `<p class="note">Vyber súbor s Bibliou (Zefania XML alebo JSON). Uloží sa len v tomto zariadení a potom sa verše doplnia automaticky.</p>${stat}<label class="fld" style="margin-top:12px"><span>Pre preklad</span><select id="impId">${PREKLADY.filter(p => !p.lokalny).map(p => `<option value="${esc(p.id)}">${esc(p.nazov)}</option>`).join('')}</select></label><div class="row-actions"><button class="btn small primary" id="impBible">Vybrať súbor</button><input type="file" id="impFile" accept=".xml,.json,text/xml,application/json" hidden></div>`);
-    a.append(imp);
+    const imp = el('div', 'card pad', `<p class="note">Vyber súbor s Bibliou (Zefania XML alebo JSON). Uloží sa len v tomto zariadení a potom sa verše doplnia automaticky.</p>${stat}<label class="fld" style="margin-top:12px"><span>Pre preklad</span><select id="impId">${PREKLADY.filter(p => !p.lokalny).map(p => `<option value="${esc(p.id)}">${esc(p.nazov)}</option>`).join('')}</select></label><div class="row-actions"><button class="btn small primary" id="impBible">Vybrať súbor</button><input type="file" id="impFile" accept=".xml,.json,text/xml,application/json" hidden></div>`);
+    root.append(imp);
     $('#impBible', imp).onclick = () => $('#impFile', imp).click();
     $('#impFile', imp).onchange = async e => {
       const f = e.target.files[0]; if (!f) return; const id = $('#impId', imp).value;
@@ -384,12 +436,12 @@
       catch (err) { alert('Súbor sa nepodarilo načítať: ' + (err.message || 'neplatný formát')); }
     };
 
-    // --- pripomienky (push) ---
-    a.append(el('div', 'section-label', 'Pripomienky'));
+    }
+    if (adminPage === 'push') {
     const DAYS = ['Po', 'Ut', 'St', 'Št', 'Pi', 'So', 'Ne'];
     const remRow = r => `<div class="tr-edit rem" data-id="${esc(r.id)}"><div class="rem-top"><input type="time" value="${esc(r.t)}"><button type="button" class="x" data-rdel aria-label="Zmazať">×</button></div>${fld('Nadpis', 'input', r.title || '').replace('<input', '<input data-f="title" placeholder="Čas na modlitbu"')}${fld('Text', 'input', r.body || '').replace('<input', '<input data-f="body" placeholder="Chvíľa pre Boha."')}<div class="days">${DAYS.map((n, i) => `<button type="button" data-d="${i + 1}" class="${(!r.days.length || r.days.includes(i + 1)) ? 'on' : ''}">${n}</button>`).join('')}</div></div>`;
-    const remSec = sec('Pripomienky (push notifikácie)', db.reminders.length || '', `<p class="note" id="pushNote">Zisťujem stav…</p><div class="row-actions" id="pushBtns"></div><div id="remList">${db.reminders.map(remRow).join('')}</div><div class="row-actions"><button class="btn small" id="remAdd">+ Pridať pripomienku</button></div>`);
-    a.append(remSec);
+    const remSec = el('div', 'card pad', `<p class="note" id="pushNote">Zisťujem stav…</p><div class="row-actions" id="pushBtns"></div><div id="remList">${db.reminders.map(remRow).join('')}</div><div class="row-actions"><button class="btn small" id="remAdd">+ Pridať pripomienku</button></div>`);
+    root.append(remSec);
     const note = $('#pushNote', remSec), btns = $('#pushBtns', remSec);
     const msg = {
       'ios-install': 'Na iPhone fungujú notifikácie len keď appku pridáš na plochu: v Safari ťukni na Zdieľať → Pridať na plochu a otvor ju odtiaľ.',
@@ -420,21 +472,43 @@
     });
     $('#remAdd', remSec).onclick = () => { db.reminders.push({ id: 'r' + Date.now().toString(36), t: '07:00', title: '', body: '', days: [] }); save(); pushSync(); renderAdmin(); };
 
-    // export / import / reset
-    $('#exp', a).onclick = () => {
-      const url = URL.createObjectURL(new Blob([JSON.stringify(db, null, 2)], { type: 'application/json' }));
-      const l = el('a'); l.href = url; l.download = 'modlitby-data.json'; l.click(); URL.revokeObjectURL(url);
-    };
-    $('#imp', a).onclick = () => $('#file', a).click();
-    $('#file', a).onchange = e => {
-      const f = e.target.files[0]; if (!f) return;
-      f.text().then(t => {
-        const d = JSON.parse(t);
-        if (!d.vyznavanie || !Array.isArray(d.remy) || !Array.isArray(d.modlitby)) throw 0;
-        db = d; save(); renderAdmin();
-      }).catch(() => alert('Neplatný súbor.'));
-    };
-    $('#rst', a).onclick = () => { if (confirm('Zahodiť všetky úpravy a vrátiť predvolený obsah?')) { db = defaults(); try { localStorage.removeItem(KEY); } catch (e) {} renderPublic(); renderAdmin(); } };
+    }
+    if (adminPage === 'backup') {
+      root.append(el('div', 'sgroup',
+        srow('exp', 'download', '#5b8def', 'Exportovať údaje', 'Stiahne zálohu ako súbor JSON') +
+        srow('imp', 'upload', '#4fae7b', 'Importovať údaje', 'Načíta zálohu zo súboru JSON') +
+        srow('rst', 'reset', '#d0446f', 'Obnoviť predvolené', 'Zahodí všetky úpravy', true)),
+        el('input', null), el('p', 'note', 'Záloha obsahuje vyznávanie, verše, modlitby a pripomienky. Nahrať ju môžeš aj do appky na inom zariadení.'));
+      const fileInp = root.querySelector('input'); fileInp.type = 'file'; fileInp.accept = 'application/json'; fileInp.hidden = true;
+      root.addEventListener('click', e => {
+        const b = e.target.closest('[data-p]'); if (!b) return;
+        if (b.dataset.p === 'exp') {
+          const url = URL.createObjectURL(new Blob([JSON.stringify(db, null, 2)], { type: 'application/json' }));
+          const l = el('a'); l.href = url; l.download = 'modlitby-data.json'; l.click(); URL.revokeObjectURL(url);
+        } else if (b.dataset.p === 'imp') fileInp.click();
+        else if (b.dataset.p === 'rst' && confirm('Zahodiť všetky úpravy a vrátiť predvolený obsah?')) { db = defaults(); try { localStorage.removeItem(KEY); } catch (e) {} renderPublic(); renderAdmin([]); }
+      });
+      fileInp.onchange = e => {
+        const f = e.target.files[0]; if (!f) return;
+        f.text().then(t => {
+          const d = JSON.parse(t);
+          if (!d.vyznavanie || !Array.isArray(d.remy) || !Array.isArray(d.modlitby)) throw 0;
+          if (!Array.isArray(d.reminders)) d.reminders = [];
+          db = d; save(); renderAdmin([]);
+        }).catch(() => alert('Neplatný súbor.'));
+      };
+    }
+    if (adminPage === 'about') {
+      root.append(el('div', 'card pad about', `
+        <p><b>Modlitby</b> – osobná appka na vyznávanie, verše a modlitby.</p>
+        <p class="note">Údaje sa ukladajú v tomto zariadení. Server (Supabase) slúži len na posielanie pripomienok a ukladá anonymný odber notifikácií, nie tvoje texty.</p>
+        <h3>Zdroje a licencie</h3>
+        <ul>
+          <li>Texty: King James Version a Bible kralická – verejné texty (zdroj: scrollmapper/bible_databases).</li>
+          <li>Strongove čísla: STEPBible.org (CC BY 4.0) a Open Scriptures Strong's dictionary (CC BY-SA).</li>
+          <li>Písma: Fraunces a Inter (Google Fonts, SIL Open Font License).</li>
+        </ul>`));
+    }
   }
 
   renderPublic(); renderAdmin([]);
