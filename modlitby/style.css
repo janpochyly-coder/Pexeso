@@ -267,3 +267,11 @@ details.acc > summary, .chip { -webkit-user-select: none; user-select: none; }
 .rte-area ul, .rte-area ol { padding-left: 1.4em; margin: 0 0 .9em; }
 .rte-area blockquote { margin: .8em 0; padding-left: 1em; border-left: 3px solid var(--accent); color: var(--muted); font-style: italic; }
 .rte-area hr { border: 0; height: 1px; background: var(--line); margin: 1.2em 0; }
+
+/* pripomienky */
+.rem-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.rem-top input[type=time] { font: 600 1.6rem var(--serif); color: var(--text); background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 6px 12px; }
+.rem-top .x { width: 36px; height: 36px; border: 0; border-radius: 10px; background: none; color: var(--muted); font-size: 1.4rem; cursor: pointer; }
+.days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.days button { height: 38px; padding: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--muted); font: 600 .8rem var(--sans); cursor: pointer; }
+.days button.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }

@@ -85,3 +85,6 @@ const KNIHY = [
   [1,'1_john','1 John',['janova','jan']],[2,'2_john','2 John',['janova','jan']],[3,'3_john','3 John',['janova','jan']],
   [0,'jude','Jude',['judov','juda','jud']],[0,'revelation','Revelation',['zjavenie','zjeveni','zj']]
 ];
+
+// Push notifikácie: adresa funkcie na serveri (Supabase)
+const PUSH_API = "https://jimzptjhjogokmlwfpnt.supabase.co/functions/v1/modlitby-push";

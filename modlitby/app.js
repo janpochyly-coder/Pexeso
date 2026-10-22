@@ -7,10 +7,11 @@
   const MHINT = 'Klikni na položku, aby si ju označil ako dnes pomodlenú. Podržaním kategórie upravíš aj poradie jej položiek.';
 
   // ===== dáta: predvolené (data.js) alebo upravené v Správe (localStorage) =====
-  const defaults = () => JSON.parse(JSON.stringify({ vyznavanie: VYZNAVANIE, remy: REMY, modlitby: MODLITBY }));
+  const defaults = () => JSON.parse(JSON.stringify({ vyznavanie: VYZNAVANIE, remy: REMY, modlitby: MODLITBY, reminders: [] }));
   let db;
   try { db = JSON.parse(localStorage.getItem(KEY)); } catch (e) {}
   if (!db || !db.vyznavanie || !db.remy || !db.modlitby) db = defaults();
+  if (!Array.isArray(db.reminders)) db.reminders = [];
   let saveMsg = '';
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(db)); } catch (e) { alert('Uloženie zlyhalo (úložisko je plné alebo blokované).'); } renderPublic(); };
 
@@ -127,6 +128,28 @@
     if (out.filter(b => b.length).length < 27) throw new Error('málo kníh');
     return out;
   }
+
+  // ===== push notifikácie (pripomienky) =====
+  const b64 = s => { const r = atob((s + '='.repeat((4 - s.length % 4) % 4)).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from([...r].map(c => c.charCodeAt(0))); };
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+  const post = (act, body) => fetch(`${PUSH_API}?a=${act}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json());
+  async function pushInfo() {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return { state: isIOS && !standalone ? 'ios-install' : 'unsupported' };
+    const reg = await navigator.serviceWorker.ready, sub = await reg.pushManager.getSubscription();
+    return { state: sub ? 'on' : Notification.permission === 'denied' ? 'denied' : 'off', reg, sub };
+  }
+  let syncT;
+  const pushSync = () => { clearTimeout(syncT); syncT = setTimeout(async () => { try { const i = await pushInfo(); if (i.sub) await post('sub', { subscription: i.sub.toJSON(), tz: Intl.DateTimeFormat().resolvedOptions().timeZone, reminders: db.reminders }); } catch (e) {} }, 700); };
+  async function pushEnable() {
+    const i = await pushInfo(); if (!i.reg) throw new Error('Tento prehliadač push notifikácie nepodporuje.');
+    if (await Notification.requestPermission() !== 'granted') throw new Error('Oznámenia nie sú povolené. Povoľ ich v nastaveniach prehliadača alebo telefónu.');
+    const { publicKey } = await fetch(`${PUSH_API}?a=key`).then(r => r.json());
+    const sub = i.sub || await i.reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64(publicKey) });
+    const r = await post('sub', { subscription: sub.toJSON(), tz: Intl.DateTimeFormat().resolvedOptions().timeZone, reminders: db.reminders });
+    if (!r.ok) throw new Error('Server odber neprijal (' + (r.error || 'chyba') + ').');
+  }
+  async function pushDisable() { const i = await pushInfo(); if (i.sub) { await post('unsub', { endpoint: i.sub.endpoint }).catch(() => {}); await i.sub.unsubscribe(); } }
 
   // ===== formátovaný text (editor + bezpečné čistenie HTML) =====
   const OK_TAGS = new Set(['STRONG', 'EM', 'U', 'P', 'BR', 'H2', 'H3', 'UL', 'OL', 'LI', 'BLOCKQUOTE', 'HR']);
@@ -347,6 +370,9 @@
       btn(d, '[data-del]', () => { if (confirm('Zmazať kategóriu ' + k.nazov + '?')) { db.modlitby.splice(i, 1); save(); renderAdmin(); } });
       a.append(d);
     });
+    const addM = el('button', 'btn', '+ Pridať kategóriu');
+    addM.onclick = () => { db.modlitby.push({ nazov: 'Nová kategória', slova: [] }); save(); renderAdmin(); };
+    a.append(addM);
     a.append(el('div', 'section-label', 'Preklady v appke'));
     const stat = PREKLADY.map(p => `<div class="tr"><b>${esc(p.id)}</b>${esc(p.nazov)} – ${p.lokalny ? 'vstavaný' : imported.has(p.id) ? 'importovaný' : 'zatiaľ nie je (vkladáš ručne alebo importuj)'}</div>`).join('');
     const imp = sec('Importovať preklad', '', `<p class="note">Vyber súbor s Bibliou (Zefania XML alebo JSON). Uloží sa len v tomto zariadení a potom sa verše doplnia automaticky.</p>${stat}<label class="fld" style="margin-top:12px"><span>Pre preklad</span><select id="impId">${PREKLADY.filter(p => !p.lokalny).map(p => `<option value="${esc(p.id)}">${esc(p.nazov)}</option>`).join('')}</select></label><div class="row-actions"><button class="btn small primary" id="impBible">Vybrať súbor</button><input type="file" id="impFile" accept=".xml,.json,text/xml,application/json" hidden></div>`);
@@ -357,9 +383,42 @@
       try { const data = parseBible(await f.text()); await idbOp('readwrite', s => s.put(data, id)); imported.add(id); delete cache[id]; alert('Preklad ' + id + ' je v appke. Doplň verše tlačidlom „Doplniť z appky“.'); renderAdmin(); }
       catch (err) { alert('Súbor sa nepodarilo načítať: ' + (err.message || 'neplatný formát')); }
     };
-    const addM = el('button', 'btn', '+ Pridať kategóriu');
-    addM.onclick = () => { db.modlitby.push({ nazov: 'Nová kategória', slova: [] }); save(); renderAdmin(); };
-    a.append(addM);
+
+    // --- pripomienky (push) ---
+    a.append(el('div', 'section-label', 'Pripomienky'));
+    const DAYS = ['Po', 'Ut', 'St', 'Št', 'Pi', 'So', 'Ne'];
+    const remRow = r => `<div class="tr-edit rem" data-id="${esc(r.id)}"><div class="rem-top"><input type="time" value="${esc(r.t)}"><button type="button" class="x" data-rdel aria-label="Zmazať">×</button></div>${fld('Nadpis', 'input', r.title || '').replace('<input', '<input data-f="title" placeholder="Čas na modlitbu"')}${fld('Text', 'input', r.body || '').replace('<input', '<input data-f="body" placeholder="Chvíľa pre Boha."')}<div class="days">${DAYS.map((n, i) => `<button type="button" data-d="${i + 1}" class="${(!r.days.length || r.days.includes(i + 1)) ? 'on' : ''}">${n}</button>`).join('')}</div></div>`;
+    const remSec = sec('Pripomienky (push notifikácie)', db.reminders.length || '', `<p class="note" id="pushNote">Zisťujem stav…</p><div class="row-actions" id="pushBtns"></div><div id="remList">${db.reminders.map(remRow).join('')}</div><div class="row-actions"><button class="btn small" id="remAdd">+ Pridať pripomienku</button></div>`);
+    a.append(remSec);
+    const note = $('#pushNote', remSec), btns = $('#pushBtns', remSec);
+    const msg = {
+      'ios-install': 'Na iPhone fungujú notifikácie len keď appku pridáš na plochu: v Safari ťukni na Zdieľať → Pridať na plochu a otvor ju odtiaľ.',
+      unsupported: 'Tento prehliadač push notifikácie nepodporuje.',
+      denied: 'Oznámenia sú zablokované. Povoľ ich v nastaveniach prehliadača alebo telefónu pre túto stránku.',
+      off: 'Notifikácie sú vypnuté. Zapni ich na tomto zariadení.',
+      on: 'Notifikácie sú zapnuté. Pripomienky sa posielajú v nastavených časoch.'
+    };
+    const paint = async () => {
+      let st = 'unsupported'; try { st = (await pushInfo()).state; } catch (e) {}
+      note.textContent = msg[st];
+      btns.innerHTML = st === 'off' ? '<button class="btn primary small" id="pOn">Zapnúť notifikácie</button>' : st === 'on' ? '<button class="btn small" id="pTest">Poslať skúšobnú</button><button class="btn small danger" id="pOff">Vypnúť</button>' : '';
+      const on = $('#pOn', btns), off = $('#pOff', btns), test = $('#pTest', btns);
+      if (on) on.onclick = async () => { on.disabled = true; try { await pushEnable(); } catch (e) { alert(e.message); } paint(); };
+      if (off) off.onclick = async () => { await pushDisable(); paint(); };
+      if (test) test.onclick = async () => { test.disabled = true; try { const i = await pushInfo(); const r = await post('test', { endpoint: i.sub.endpoint }); if (!r.ok) alert('Skúšobná notifikácia sa neodoslala.'); } catch (e) { alert('Server je nedostupný.'); } test.disabled = false; };
+    };
+    paint();
+    const remOf = box => db.reminders.find(r => r.id === box.dataset.id);
+    remSec.addEventListener('input', e => { const box = e.target.closest('.rem'); if (!box) return; const r = remOf(box); if (!r) return; if (e.target.type === 'time') r.t = e.target.value || '07:00'; else if (e.target.dataset.f) r[e.target.dataset.f] = e.target.value; save(); pushSync(); });
+    remSec.addEventListener('click', e => {
+      const box = e.target.closest('.rem'); if (!box) return; const r = remOf(box); if (!r) return;
+      if (e.target.closest('[data-rdel]')) { db.reminders = db.reminders.filter(x => x !== r); save(); pushSync(); renderAdmin(); return; }
+      const b = e.target.closest('[data-d]'); if (!b) return;
+      const set = new Set(r.days.length ? r.days : [1, 2, 3, 4, 5, 6, 7]), d = +b.dataset.d;
+      if (set.has(d)) { if (set.size > 1) set.delete(d); } else set.add(d);
+      r.days = set.size === 7 ? [] : [...set].sort(); b.classList.toggle('on', set.has(d)); save(); pushSync();
+    });
+    $('#remAdd', remSec).onclick = () => { db.reminders.push({ id: 'r' + Date.now().toString(36), t: '07:00', title: '', body: '', days: [] }); save(); pushSync(); renderAdmin(); };
 
     // export / import / reset
     $('#exp', a).onclick = () => {
